@@ -93,12 +93,16 @@ function startApiServer(): void {
     return;
   }
   const axiomDbPath = path.join(app.getPath("userData"), "axiom.db");
+  // NODE_PATH lets the externalized better-sqlite3 (and any other non-bundled
+  // native modules) be resolved from the packaged resources directory.
+  const nodeModulesPath = path.join(process.resourcesPath, "api-server", "node_modules");
   apiServerProcess = spawn(process.execPath, [serverPath], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: "8080",
       AXIOM_DB_PATH: axiomDbPath,
+      NODE_PATH: nodeModulesPath,
     },
     detached: false,
     stdio: ["ignore", "pipe", "pipe"],

@@ -26,6 +26,16 @@ const config = {
       to: "api-server/dist",
       filter: ["**/*"],
     },
+    {
+      from: "../api-server/drizzle",
+      to: "api-server/drizzle",
+      filter: ["**/*"],
+    },
+    {
+      from: "../../node_modules/.pnpm/better-sqlite3@12.10.0/node_modules/better-sqlite3",
+      to: "api-server/node_modules/better-sqlite3",
+      filter: ["**/*"],
+    },
   ],
 
   mac: {

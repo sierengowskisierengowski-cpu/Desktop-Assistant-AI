@@ -362,7 +362,8 @@ export default function Chat() {
     setIsStreaming(true);
     setStreamingContent("");
 
-    fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
+    const apiBase = window.location.protocol === "file:" ? "http://127.0.0.1:8080" : "";
+    fetch(`${apiBase}/api/chat/sessions/${sessionId}/messages/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
