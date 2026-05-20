@@ -1,8 +1,8 @@
 /** @type {import('electron-builder').Configuration} */
 const config = {
-  appId: "com.axiom.assistant",
+  appId: "com.josephsierengowski.axiom",
   productName: "AXIOM",
-  copyright: "Copyright © 2025 AXIOM",
+  copyright: "Copyright © 2025 Joseph Sierengowski. All rights reserved.",
   asar: true,
   compression: "maximum",
 

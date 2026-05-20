@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "TxiGBHYbY9kYBRcbq9LA_"
+uri = "file://artifacts/desktop/icons/icon.png"
+type = "image"
+title = "axiom-lightning-icon"
+
+[[generated]]
+id = "PxusOi_3GOS-T_rb1eWo9"
+uri = "file://artifacts/desktop/icons/tray-icon.png"
+type = "image"
+title = "axiom-tray-icon"

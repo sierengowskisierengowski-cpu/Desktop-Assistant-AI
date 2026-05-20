@@ -1,207 +1,259 @@
-# AXIOM — Desktop AI Assistant
+# ⚡ AXIOM — Desktop AI Assistant
 
 > A premium personal AI command center. Lives in your system tray. Runs on your GPU. Knows your system.
 
-AXIOM is a native desktop AI assistant built with Electron + React. It pops up instantly via a global hotkey, lets you command your computer in plain English, and runs powerful automations — file organization, cleanup, scheduling, and more — using either a local AI model on your GPU (via Ollama) or a cloud provider like OpenAI.
+**Built by [Joseph Sierengowski](https://github.com/josephsierengowski)**
+
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)
+![Electron](https://img.shields.io/badge/Electron-36-47848F?style=flat-square&logo=electron)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
+![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+
+---
+
+## What is AXIOM?
+
+AXIOM is a native desktop AI assistant that lives in your system tray and launches instantly via a global hotkey. It lets you control your computer in plain English — organize files, run scheduled automations, manage a personal knowledge base, and have full AI conversations — all running locally on your own hardware or via a cloud API of your choice.
+
+No subscriptions. No cloud lock-in. Your machine, your data.
+
+---
+
+## Download & Install
+
+### macOS
+1. Download `AXIOM-mac-arm64.dmg` (Apple Silicon) or `AXIOM-mac-x64.dmg` (Intel) from [Releases](https://github.com/josephsierengowski/axiom/releases)
+2. Open the `.dmg` and drag **AXIOM** into your Applications folder
+3. First launch: right-click → **Open** to bypass macOS Gatekeeper
+4. AXIOM appears in your menu bar — press **⌘ Shift Space** to open it from anywhere
+
+### Windows
+1. Download `AXIOM-Setup-win-x64.exe` from [Releases](https://github.com/josephsierengowski/axiom/releases)
+2. Run the installer — creates Start Menu and optional desktop shortcuts
+3. AXIOM starts in the system tray — press **Ctrl+Shift+Space** to open it anywhere
+
+### Linux
+1. Download `AXIOM-linux-x86_64.AppImage` from [Releases](https://github.com/josephsierengowski/axiom/releases)
+2. `chmod +x AXIOM-linux-x86_64.AppImage`
+3. `./AXIOM-linux-x86_64.AppImage`
+
+---
+
+## First-Time Setup
+
+When you first open AXIOM, the onboarding wizard walks you through four steps:
+
+1. **Choose AI mode** — Local GPU (Ollama) or Cloud (OpenAI / compatible API)
+2. **Configure your model** — Pull a model like `llama3` or paste your API key
+3. **Set allowed paths** — Tell AXIOM which folders it can read and write (e.g. `~/Downloads`, `~/Documents`)
+4. **Set your hotkey** — Default: `⌘ Shift Space` / `Ctrl+Shift+Space`
+
+Done. AXIOM is ready.
 
 ---
 
 ## Features
 
-### AI Chat
-Talk to AXIOM in plain language. Ask it to clean your Downloads, organize files by type, find duplicates, or just answer questions about your system. The AI confirms what it's going to do before any destructive operation, and every action is logged with a one-click undo.
-
-### Local GPU Mode (Ollama)
-Run AI entirely on your own machine — no API costs, no data leaving your computer. AXIOM auto-detects a running Ollama instance, lists your installed models, and lets you pull new ones (Llama 3, Mistral, Phi-3, Gemma, and more) directly from the Settings panel.
-
-### Cloud Mode
-Connect your OpenAI API key (or any OpenAI-compatible endpoint) to use GPT-4o, GPT-4, or other cloud models. Switch between local and cloud anytime from Settings.
-
-### Task Scheduler
-Set up recurring automated tasks with plain-language descriptions and a cron schedule. Tasks run silently in the background even when the window is closed. Toggle them on/off, run them on demand, and inspect run logs.
-
-### Knowledge Base
-Store notes about your system, preferences, and context — naming conventions, folder structures, things to never touch. The AI reads your entire knowledge base on every request, so it always knows your setup without you repeating yourself.
-
-### Activity Log
-Every action the AI has ever taken is logged with full detail. File operations show which files were affected. Undo restores files to their original location.
-
-### Quick Actions
-One-click buttons for your most-used commands. Fully configurable — add, edit, reorder, and delete. Clicking a button instantly fires that command through the AI pipeline.
-
-### System Status
-Live CPU, RAM, and disk usage — updated every 3 seconds. Always visible inside the app.
-
-### Glassmorphism UI
-Every surface is a frosted blur panel. The UI feels like a premium macOS utility: translucent, layered, sharp. Smooth animations throughout. Light, dark, and system theme modes.
+| Section | What it does |
+|---|---|
+| **Chat** | Full AI chat with streaming responses, voice input, session history, and one-click file action cards |
+| **Scheduler** | Cron-based recurring tasks — AXIOM runs them automatically and logs every result with undo |
+| **Knowledge Base** | Persistent notes injected into every AI request so AXIOM always knows your context |
+| **Activity Log** | Full history of every action with undo support for file operations |
+| **Quick Actions** | One-click AI command buttons — drag to reorder, six starter presets included |
+| **File Operations** | Scan, organize, delete, and move files across approved paths with preview before execution |
+| **System Stats** | Live CPU, RAM, and disk usage plus AXIOM usage analytics |
+| **Settings** | Global hotkey, allowed paths, AI provider config, notifications, window behavior |
 
 ---
 
-## Quick Start
+## Using Local AI (Ollama)
 
-### Web Preview (Replit)
-The app runs as a full web application in Replit for development and preview:
+AXIOM works best with [Ollama](https://ollama.ai) for fully private, offline AI:
 
 ```bash
-# Start the API server
-pnpm --filter @workspace/api-server run dev
+# Install Ollama from https://ollama.ai, then:
+ollama serve
 
-# Start the frontend
-pnpm --filter @workspace/desktop run dev
+# Recommended — works well on most machines (8GB+ RAM):
+ollama pull llama3
+
+# Higher quality responses (needs 16GB+ RAM):
+ollama pull mistral
+
+# Fast and lightweight (4GB RAM):
+ollama pull phi3
 ```
 
-### Running Locally with Ollama (GPU Mode)
-1. Install [Ollama](https://ollama.ai) on your machine
-2. Pull a model: `ollama pull llama3` or `ollama pull mistral`
-3. Ollama runs automatically at `http://localhost:11434`
-4. Open AXIOM, go to Settings, set AI Mode to **Local (GPU)**, and select your model
-
-### Cloud Mode Setup
-1. Go to **Settings > AI Mode**
-2. Select **Cloud**
-3. Enter your OpenAI API key (or a compatible endpoint URL)
-4. Select your preferred model (GPT-4o recommended)
+AXIOM auto-detects Ollama at `http://localhost:11434`. You can override the URL in **Settings → AI Provider**.
 
 ---
 
-## Architecture
+## Using Cloud AI
+
+1. Go to **Settings → AI Provider → Cloud**
+2. Enter your API key (`sk-...` for OpenAI)
+3. Optionally set a custom base URL for OpenAI-compatible endpoints (Together, Groq, Mistral, local vLLM, etc.)
+4. Select your model from the dropdown
+
+---
+
+## Building from Source
+
+### Requirements
+- [Node.js](https://nodejs.org) 18+
+- [pnpm](https://pnpm.io) 8+
+- [Ollama](https://ollama.ai) (optional, for local AI)
+
+### Clone & install
+
+```bash
+git clone https://github.com/josephsierengowski/axiom.git
+cd axiom
+pnpm install
+```
+
+### Run in development
+
+```bash
+# Terminal 1 — API server (port 8080)
+pnpm --filter @workspace/api-server run dev
+
+# Terminal 2 — Web UI (opens at localhost:21098)
+pnpm --filter @workspace/desktop run dev
+
+# Or run as a native Electron window:
+pnpm --filter @workspace/desktop run electron:dev
+```
+
+### Build a distributable installer
+
+```bash
+# macOS — .dmg + .zip (Intel + Apple Silicon)
+pnpm --filter @workspace/desktop run electron:pack:mac
+
+# Windows — NSIS installer .exe
+pnpm --filter @workspace/desktop run electron:pack:win
+
+# Linux — AppImage
+pnpm --filter @workspace/desktop run electron:pack:linux
+
+# All platforms
+pnpm --filter @workspace/desktop run electron:pack
+```
+
+Installers are output to `artifacts/desktop/release/`.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Desktop shell | [Electron](https://electronjs.org) 36 |
+| Frontend | [React](https://react.dev) 19 + [Vite](https://vitejs.dev) 7 + TypeScript |
+| Styling | [Tailwind CSS](https://tailwindcss.com) 4 + [shadcn/ui](https://ui.shadcn.com) |
+| Animations | [Framer Motion](https://framer.motion.com) |
+| API server | [Express](https://expressjs.com) 5 + TypeScript |
+| Database | SQLite via [Drizzle ORM](https://orm.drizzle.team) |
+| Scheduling | node-cron |
+| System stats | systeminformation |
+| Package manager | pnpm workspaces (monorepo) |
+| Installer | [electron-builder](https://electron.build) |
+
+---
+
+## Project Structure
 
 ```
 axiom/
 ├── artifacts/
-│   ├── api-server/          # Express 5 API backend
-│   │   └── src/routes/      # Route handlers (chat, scheduler, knowledge, files, stats, ai, etc.)
-│   └── desktop/             # React + Vite frontend
-│       └── src/
-│           ├── pages/       # App pages (chat, scheduler, knowledge, activity, etc.)
-│           └── components/  # Shared UI components
-├── lib/
-│   ├── api-spec/            # OpenAPI 3.1 spec (source of truth)
-│   ├── api-client-react/    # Generated React Query hooks
-│   ├── api-zod/             # Generated Zod validation schemas
-│   └── db/                  # Drizzle ORM schema + PostgreSQL
+│   ├── desktop/                  # Electron + React/Vite frontend
+│   │   ├── electron/             # Main process (main.ts, preload.ts)
+│   │   ├── src/
+│   │   │   ├── pages/            # Chat, Scheduler, Knowledge, Stats, etc.
+│   │   │   ├── components/       # Shared UI components
+│   │   │   └── lib/              # Utilities, API client
+│   │   ├── icons/                # App icons (PNG, ICO, ICNS)
+│   │   └── electron-builder.config.cjs
+│   └── api-server/               # Express API + SQLite database
+│       ├── src/
+│       │   ├── routes/           # chat, files, scheduler, knowledge, activity...
+│       │   └── db/               # Drizzle schema & migrations
+│       └── drizzle/              # Migration SQL files
+└── packages/
+    └── api-client-react/         # Auto-generated typed API hooks (Orval)
 ```
-
-### Stack
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, Vite, Tailwind CSS v4, Framer Motion |
-| Backend | Express 5, Node.js 24, TypeScript 5.9 |
-| Database | PostgreSQL + Drizzle ORM |
-| AI (Cloud) | OpenAI SDK (OpenAI-compatible) |
-| AI (Local) | Ollama REST API |
-| Scheduling | node-cron |
-| System Stats | systeminformation |
-| API Contract | OpenAPI 3.1 → Orval codegen |
 
 ---
 
-## API Reference
-
-The full API is defined in `lib/api-spec/openapi.yaml`. After any spec changes, regenerate types:
-
-```bash
-pnpm --filter @workspace/api-spec run codegen
-```
-
-### Key Endpoints
+## Key API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/chat/sessions/:id/messages` | Send a message and get AI response |
-| `GET` | `/api/chat/recent` | Recent chat sessions with previews |
+| `POST` | `/api/chat/sessions/:id/messages/stream` | Send a message — SSE streaming response |
+| `GET`  | `/api/chat/sessions` | List all chat sessions |
 | `POST` | `/api/scheduler/tasks/:id/run` | Run a scheduled task immediately |
-| `GET` | `/api/scheduler/status` | Upcoming tasks with countdowns |
-| `GET` | `/api/knowledge/notes` | List all knowledge base notes |
-| `GET` | `/api/ai/status` | AI provider status + Ollama connectivity |
-| `GET` | `/api/ai/models` | All available models (local + cloud) |
+| `GET`  | `/api/scheduler/status` | All tasks with next-run times |
+| `GET`  | `/api/knowledge/notes` | List knowledge base notes |
+| `GET`  | `/api/ai/status` | Ollama connectivity + version |
+| `GET`  | `/api/ai/models` | Available models (local + cloud) |
 | `POST` | `/api/ai/models/pull` | Pull a new Ollama model |
 | `POST` | `/api/files/preview` | Preview affected files before operation |
 | `POST` | `/api/files/execute` | Execute a confirmed file operation |
-| `GET` | `/api/stats/system` | Live CPU, RAM, disk stats |
-| `GET` | `/api/activity/summary` | Activity log summary counts |
+| `GET`  | `/api/stats/system` | Live CPU, RAM, disk metrics |
+| `GET`  | `/api/activity/summary` | Usage counts by type |
 | `POST` | `/api/activity/:id/undo` | Undo a file operation |
 
 ---
 
-## File Operations
+## Security
 
-AXIOM can perform the following operations on approved paths:
+AXIOM is designed to be safe by default:
 
-| Operation | Description |
-|-----------|-------------|
-| `delete` | Delete files matching criteria (age, extension, size) |
-| `organize` | Sort files into subfolders by type (Images, Videos, Documents, etc.) |
-| `move` | Move files to a destination directory |
-| `dedup` | Identify and remove potential duplicate files |
-
-**Safety:** Every file operation requires:
-1. The target path to be in your **Allowed Paths** list (set in Settings)
-2. An explicit confirmation step showing exactly which files will be affected
-3. Destructive operations move files to a temp location first, enabling undo
+- **Allowed paths only** — File operations are restricted exclusively to paths you approve in Settings. AXIOM cannot touch anything outside those directories.
+- **Confirmation required** — Every destructive operation shows exactly which files will be affected and requires explicit approval before running.
+- **Undo support** — Deleted and moved files are staged before removal so they can be restored.
+- **Local token auth** — The embedded API server generates a random UUID token each session. The renderer must present this token with every request, so no other process on your machine can call the API.
+- **No telemetry** — Nothing leaves your machine unless you explicitly use cloud AI mode.
 
 ---
 
-## Scheduled Task Cron Syntax
+## Cron Reference
 
-AXIOM uses standard cron syntax:
+AXIOM uses standard 5-field cron syntax for the Task Scheduler:
 
 ```
 ┌──────── minute (0-59)
 │ ┌────── hour (0-23)
 │ │ ┌──── day of month (1-31)
 │ │ │ ┌── month (1-12)
-│ │ │ │ ┌ day of week (0-6, Sun=0)
+│ │ │ │ ┌ day of week (0=Sun, 6=Sat)
 │ │ │ │ │
 * * * * *
 ```
 
-**Common schedules:**
-- `0 9 * * 1` — Every Monday at 9am
-- `0 8 1 * *` — 1st of every month at 8am
-- `*/30 * * * *` — Every 30 minutes
-- `0 */2 * * *` — Every 2 hours
-
----
-
-## Development
-
-```bash
-# Install dependencies
-pnpm install
-
-# Run full typecheck
-pnpm run typecheck
-
-# Build all packages
-pnpm run build
-
-# Push DB schema changes
-pnpm --filter @workspace/db run push
-
-# Regenerate API client after spec changes
-pnpm --filter @workspace/api-spec run codegen
-```
-
-### Environment Variables
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string (auto-set by Replit) |
-| `OPENAI_API_KEY` | Fallback OpenAI key (optional — set per-user in Settings) |
-| `PORT` | Server port (auto-set by Replit) |
-
----
-
-## Security
-
-- File operations are sandboxed to user-approved paths only
-- No file operations execute without user confirmation
-- Undo is available for all destructive operations
-- Local GPU mode keeps all data on-device — nothing sent to external servers
-- API keys are stored in the database (not in environment variables) for per-user configuration
+| Expression | Meaning |
+|---|---|
+| `0 9 * * 1` | Every Monday at 9am |
+| `0 8 1 * *` | 1st of every month at 8am |
+| `*/30 * * * *` | Every 30 minutes |
+| `0 0 * * 0` | Every Sunday at midnight |
+| `0 */2 * * *` | Every 2 hours |
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for full text.
+
+---
+
+## Author
+
+**Joseph Sierengowski**
+GitHub: [@josephsierengowski](https://github.com/josephsierengowski)
+
+---
+
+*AXIOM — Your AI, your machine, your rules.*

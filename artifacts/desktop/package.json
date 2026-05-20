@@ -1,6 +1,11 @@
 {
   "name": "@workspace/desktop",
   "version": "1.0.0",
+  "description": "AXIOM — AI-powered desktop assistant for file management, task scheduling, and intelligent automation",
+  "author": {
+    "name": "Joseph Sierengowski",
+    "email": "joseph@axiomapp.dev"
+  },
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
