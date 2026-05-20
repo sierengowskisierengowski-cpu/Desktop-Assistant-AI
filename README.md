@@ -32,10 +32,13 @@ No subscriptions. No cloud lock-in. Your machine, your data.
 2. Run the installer — creates Start Menu and optional desktop shortcuts
 3. AXIOM starts in the system tray — press **Ctrl+Shift+Space** to open it anywhere
 
-### Linux
-1. Download `AXIOM-linux-x86_64.AppImage` from [Releases](https://github.com/josephsierengowski/axiom/releases)
-2. `chmod +x AXIOM-linux-x86_64.AppImage`
-3. `./AXIOM-linux-x86_64.AppImage`
+### Linux — one-liner install
+```bash
+curl -fsSL https://raw.githubusercontent.com/josephsierengowski/axiom/main/install.sh | bash
+```
+That's it. No cloning, no building. The script downloads the latest AppImage, makes it executable, and adds it to your app launcher.
+
+Or manually: download `AXIOM-linux-x86_64.AppImage` from [Releases](https://github.com/josephsierengowski/axiom/releases), `chmod +x` it, and run it.
 
 ---
 
@@ -160,6 +163,24 @@ pnpm --filter @workspace/desktop run electron:pack
 ```
 
 Installers are output to `artifacts/desktop/release/`.
+
+---
+
+## Publishing a Release (GitHub Actions)
+
+Once the repo is on GitHub, publishing a new release is a single command — GitHub builds all three platforms automatically:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+That's all. GitHub Actions will:
+1. Build the `.AppImage` on Linux, `.dmg` on macOS, `.exe` on Windows — all in parallel
+2. Create a GitHub Release and attach all three installers
+3. The Linux one-liner install script will automatically pull the new version
+
+No local build environment needed. Your machine never has to compile anything.
 
 ---
 
