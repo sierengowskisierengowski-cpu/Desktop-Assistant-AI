@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2, Pin, Plus, Shield } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, Loader2, CheckCircle2, AlertTriangle, Trash2, Plus, Shield, Info, Zap } from "lucide-react";
 import { electron, isElectron } from "@/lib/electron-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,30 +17,42 @@ import {
   useUpdateSettings,
   useGetAiStatus, getGetAiStatusQueryKey,
   useListAiModels, getListAiModelsQueryKey,
-  usePullAiModel,
-  useDeleteAiModel,
-  useGetModelPullStatus,
-  getGetModelPullStatusQueryKey,
+  usePullAiModel, useDeleteAiModel,
+  useGetModelPullStatus, getGetModelPullStatusQueryKey,
   useGetAllowedPaths, getGetAllowedPathsQueryKey,
-  useAddAllowedPath,
-  useRemoveAllowedPath,
+  useAddAllowedPath, useRemoveAllowedPath,
 } from "@workspace/api-client-react";
-import type { AppSettings, AppSettingsUpdate } from "@workspace/api-client-react";
+import type { AppSettingsUpdate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
-function Section({ title, icon: Icon, children }: { title: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
+const SECTION_COLORS: Record<string, string> = {
+  ai:         "text-indigo-400",
+  paths:      "text-orange-400",
+  hotkey:     "text-violet-400",
+  appearance: "text-sky-400",
+  window:     "text-cyan-400",
+  notifs:     "text-emerald-400",
+  about:      "text-zinc-400",
+};
+
+function Section({ id, title, icon: Icon, children }: {
+  id: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass-card rounded-xl p-5 border border-white/10 space-y-4"
+      className="glass-card rounded-xl p-5 border border-white/[0.06] space-y-4"
     >
       <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-primary" />
+        <Icon className={cn("w-4 h-4", SECTION_COLORS[id] ?? "text-muted-foreground")} />
         <h2 className="text-sm font-semibold">{title}</h2>
       </div>
-      <Separator className="bg-white/10" />
+      <Separator className="bg-white/[0.07]" />
       <div className="space-y-4">{children}</div>
     </motion.div>
   );
@@ -67,9 +79,7 @@ export default function Settings() {
   const [newPathInput, setNewPathInput] = useState("");
 
   const { data: settings, isLoading } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
-  const { data: aiStatus } = useGetAiStatus({
-    query: { queryKey: getGetAiStatusQueryKey(), refetchInterval: 10000 },
-  });
+  const { data: aiStatus } = useGetAiStatus({ query: { queryKey: getGetAiStatusQueryKey(), refetchInterval: 10000 } });
   const { data: models = [] } = useListAiModels({ query: { queryKey: getListAiModelsQueryKey() } });
 
   const { data: pullStatus } = useGetModelPullStatus(activePulling ?? "", {
@@ -92,7 +102,7 @@ export default function Settings() {
       setActivePulling(null);
       queryClient.invalidateQueries({ queryKey: getListAiModelsQueryKey() });
     } else if (pullStatus.status === "error") {
-      toast({ title: `Pull failed`, description: pullStatus.error || "Unknown error", variant: "destructive" });
+      toast({ title: "Pull failed", description: pullStatus.error || "Unknown error", variant: "destructive" });
       setActivePulling(null);
     }
   }, [pullStatus, activePulling, toast, queryClient]);
@@ -105,23 +115,14 @@ export default function Settings() {
     updateSettings.mutate({ data: patch }, {
       onSuccess: async () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-        // Apply OS-level effects when running as Electron desktop app
         if (isElectron) {
           if (patch.hotkey !== undefined) {
             const result = await electron.updateHotkey(patch.hotkey);
-            if (!result.success) {
-              toast({ title: "Hotkey could not be registered", description: "Try a different key combination", variant: "destructive" });
-            }
+            if (!result.success) toast({ title: "Hotkey could not be registered", description: "Try a different key combination", variant: "destructive" });
           }
-          if (patch.launchAtLogin !== undefined) {
-            await electron.setAutoLaunch(patch.launchAtLogin);
-          }
-          if (patch.dismissOnBlur !== undefined) {
-            await electron.setDismissOnBlur(patch.dismissOnBlur);
-          }
-          if (patch.startMinimized !== undefined) {
-            await electron.setStartMinimized(patch.startMinimized);
-          }
+          if (patch.launchAtLogin !== undefined) await electron.setAutoLaunch(patch.launchAtLogin);
+          if (patch.dismissOnBlur !== undefined) await electron.setDismissOnBlur(patch.dismissOnBlur);
+          if (patch.startMinimized !== undefined) await electron.setStartMinimized(patch.startMinimized);
         }
       },
       onError: () => toast({ title: "Settings update failed", variant: "destructive" }),
@@ -158,9 +159,7 @@ export default function Settings() {
     setTimeout(() => setLocation("/onboarding"), 100);
   };
 
-  const { data: allowedPaths = [] } = useGetAllowedPaths({
-    query: { queryKey: getGetAllowedPathsQueryKey() },
-  });
+  const { data: allowedPaths = [] } = useGetAllowedPaths({ query: { queryKey: getGetAllowedPathsQueryKey() } });
   const addPath = useAddAllowedPath();
   const removePath = useRemoveAllowedPath();
 
@@ -172,7 +171,6 @@ export default function Settings() {
       pathToAdd = result;
     }
     if (!pathToAdd) return;
-
     addPath.mutate({ data: { path: pathToAdd } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetAllowedPathsQueryKey() });
@@ -205,73 +203,58 @@ export default function Settings() {
   if (isLoading || !settings) {
     return (
       <div className="p-6 space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-48 rounded-xl bg-white/5" />
-        ))}
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl bg-white/5" />)}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 py-4 border-b border-white/10">
-        <h1 className="text-base font-semibold">Settings</h1>
+      <div className="px-6 py-4 border-b border-white/[0.07]">
+        <h1 className="text-base font-semibold flex items-center gap-2">
+          <SettingsIcon className="w-4 h-4 text-zinc-400" />
+          Settings
+        </h1>
         <p className="text-xs text-muted-foreground mt-0.5">All changes apply immediately</p>
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
 
-        {/* AI Mode */}
-        <Section title="AI Provider" icon={Cpu}>
-          <SettingRow
-            label="Mode"
-            description="Switch between local GPU (Ollama) and cloud AI"
-          >
+        {/* AI Provider */}
+        <Section id="ai" title="AI Provider" icon={Cpu}>
+          <SettingRow label="Mode" description="Switch between local GPU (Ollama) and cloud AI">
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className={cn(
-                  "h-7 text-xs",
-                  settings.aiMode === "local"
-                    ? "bg-primary/20 text-primary border border-primary/30"
-                    : "glass-button"
-                )}
+                className={cn("h-7 text-xs", settings.aiMode === "local" ? "btn-action" : "glass-button")}
                 onClick={() => update({ aiMode: "local" })}
                 data-testid="button-ai-mode-local"
               >
-                <Cpu className="w-3 h-3 mr-1" />
-                Local GPU
+                <Cpu className="w-3 h-3 mr-1" />Local GPU
               </Button>
               <Button
                 size="sm"
-                className={cn(
-                  "h-7 text-xs",
-                  settings.aiMode === "cloud"
-                    ? "bg-primary/20 text-primary border border-primary/30"
-                    : "glass-button"
-                )}
+                className={cn("h-7 text-xs", settings.aiMode === "cloud" ? "btn-sky" : "glass-button")}
                 onClick={() => update({ aiMode: "cloud" })}
                 data-testid="button-ai-mode-cloud"
               >
-                <Cloud className="w-3 h-3 mr-1" />
-                Cloud
+                <Cloud className="w-3 h-3 mr-1" />Cloud
               </Button>
             </div>
           </SettingRow>
 
-          {/* Ollama status */}
           {settings.aiMode === "local" && (
             <div className={cn(
               "rounded-lg p-3 border text-xs",
               aiStatus?.ollamaAvailable
-                ? "bg-green-500/5 border-green-500/20"
-                : "bg-amber-500/5 border-amber-500/20"
+                ? "bg-emerald-500/8 border-emerald-500/25"
+                : "bg-amber-500/8 border-amber-500/25"
             )}>
               <div className="flex items-center gap-2">
                 {aiStatus?.ollamaAvailable
-                  ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                  ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   : <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-                <span className={cn("flex-1", aiStatus?.ollamaAvailable ? "text-green-300" : "text-amber-300")}>
+                <span className={cn("flex-1", aiStatus?.ollamaAvailable ? "text-emerald-300" : "text-amber-300")}>
                   {aiStatus?.ollamaAvailable
                     ? `Ollama connected · v${aiStatus.ollamaVersion || "unknown"}`
                     : "Ollama not detected — install from ollama.ai and run `ollama serve`"}
@@ -284,43 +267,30 @@ export default function Settings() {
                     onClick={() => update({ aiMode: "cloud" })}
                     data-testid="button-fallback-to-cloud"
                   >
-                    <Cloud className="w-2.5 h-2.5 mr-1" />
-                    Use Cloud
+                    <Cloud className="w-2.5 h-2.5 mr-1" />Use Cloud
                   </Button>
                 )}
               </div>
             </div>
           )}
 
-          {/* Local: Ollama base URL + model */}
           {settings.aiMode === "local" && (
             <>
               <SettingRow label="Ollama URL">
-                <Input
-                  value={settings.ollamaBaseUrl}
-                  onChange={e => update({ ollamaBaseUrl: e.target.value })}
-                  className="glass-input h-7 text-xs w-52 font-mono"
-                  data-testid="input-ollama-url"
-                />
+                <Input value={settings.ollamaBaseUrl} onChange={e => update({ ollamaBaseUrl: e.target.value })} className="glass-input h-7 text-xs w-52 font-mono" data-testid="input-ollama-url" />
               </SettingRow>
-
               <SettingRow label="Active Model">
                 <Select value={settings.aiModel} onValueChange={v => update({ aiModel: v })}>
                   <SelectTrigger className="glass-input h-7 text-xs w-44" data-testid="select-local-model">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/10">
-                    {localModels.length === 0 && (
-                      <SelectItem value={settings.aiModel} className="text-xs">{settings.aiModel}</SelectItem>
-                    )}
-                    {localModels.map(m => (
-                      <SelectItem key={m.name} value={m.name} className="text-xs">{m.name}</SelectItem>
-                    ))}
+                  <SelectContent className="glass-panel border-white/[0.08]">
+                    {localModels.length === 0 && <SelectItem value={settings.aiModel} className="text-xs">{settings.aiModel}</SelectItem>}
+                    {localModels.map(m => <SelectItem key={m.name} value={m.name} className="text-xs">{m.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </SettingRow>
 
-              {/* Model manager */}
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Installed Models</p>
                 {localModels.length === 0 ? (
@@ -328,13 +298,13 @@ export default function Settings() {
                 ) : (
                   <div className="space-y-1.5">
                     {localModels.map(m => (
-                      <div key={m.name} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5">
+                      <div key={m.name} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/[0.05]">
                         <div>
                           <span className="text-xs font-medium">{m.name}</span>
                           {m.size && <span className="text-[10px] text-muted-foreground ml-2">{m.size}</span>}
                         </div>
                         <button
-                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-destructive/10"
+                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-destructive/15 transition-colors"
                           onClick={() => handleDeleteModel(m.name)}
                           data-testid={`button-delete-model-${m.name}`}
                         >
@@ -344,21 +314,16 @@ export default function Settings() {
                     ))}
                   </div>
                 )}
-                {/* Active pull progress */}
                 {activePulling && pullStatus && (
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 space-y-1.5">
+                  <div className="rounded-lg border border-indigo-500/25 bg-indigo-500/8 p-2.5 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-primary font-medium flex items-center gap-1">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        Pulling {activePulling}…
+                      <span className="text-indigo-300 font-medium flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />Pulling {activePulling}…
                       </span>
                       <span className="text-muted-foreground">{pullStatus.progress ?? 0}%</span>
                     </div>
                     <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all duration-500"
-                        style={{ width: `${pullStatus.progress ?? 0}%` }}
-                      />
+                      <div className="h-full rounded-full bg-indigo-400 transition-all duration-500" style={{ width: `${pullStatus.progress ?? 0}%` }} />
                     </div>
                     {pullStatus.total != null && pullStatus.total > 0 && (
                       <p className="text-[10px] text-muted-foreground/60">
@@ -378,8 +343,7 @@ export default function Settings() {
                   />
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs border border-white/10"
+                    className="h-7 text-xs glass-button"
                     onClick={handlePullModel}
                     disabled={!pullModelName.trim() || pullModel.isPending || !!activePulling}
                     data-testid="button-pull-model"
@@ -391,34 +355,20 @@ export default function Settings() {
             </>
           )}
 
-          {/* Cloud: API key + model */}
           {settings.aiMode === "cloud" && (
             <>
               <SettingRow label="API Key">
-                <Input
-                  type="password"
-                  value={settings.cloudApiKey || ""}
-                  onChange={e => update({ cloudApiKey: e.target.value })}
-                  placeholder="sk-..."
-                  className="glass-input h-7 text-xs w-52 font-mono"
-                  data-testid="input-api-key"
-                />
+                <Input type="password" value={settings.cloudApiKey || ""} onChange={e => update({ cloudApiKey: e.target.value })} placeholder="sk-..." className="glass-input h-7 text-xs w-52 font-mono" data-testid="input-api-key" />
               </SettingRow>
               <SettingRow label="Base URL" description="Override for custom OpenAI-compatible endpoints">
-                <Input
-                  value={settings.cloudBaseUrl || ""}
-                  onChange={e => update({ cloudBaseUrl: e.target.value })}
-                  placeholder="https://api.openai.com/v1"
-                  className="glass-input h-7 text-xs w-52 font-mono"
-                  data-testid="input-base-url"
-                />
+                <Input value={settings.cloudBaseUrl || ""} onChange={e => update({ cloudBaseUrl: e.target.value })} placeholder="https://api.openai.com/v1" className="glass-input h-7 text-xs w-52 font-mono" data-testid="input-base-url" />
               </SettingRow>
               <SettingRow label="Model">
                 <Select value={settings.aiModel} onValueChange={v => update({ aiModel: v })}>
                   <SelectTrigger className="glass-input h-7 text-xs w-44" data-testid="select-cloud-model">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/10">
+                  <SelectContent className="glass-panel border-white/[0.08]">
                     {cloudModels.map(m => (
                       <SelectItem key={m.name} value={m.name} className="text-xs">
                         {m.name}
@@ -433,22 +383,15 @@ export default function Settings() {
         </Section>
 
         {/* Allowed Paths */}
-        <Section title="Allowed Paths" icon={Shield}>
+        <Section id="paths" title="Allowed Paths" icon={Shield}>
           <p className="text-xs text-muted-foreground">AXIOM will only read and write within these directories.</p>
           <div className="space-y-2">
-            {allowedPaths.length === 0 && (
-              <p className="text-xs text-muted-foreground/60 italic">No paths added yet.</p>
-            )}
+            {allowedPaths.length === 0 && <p className="text-xs text-muted-foreground/60 italic">No paths added yet.</p>}
             {allowedPaths.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2 border border-white/10">
-                <FolderOpen className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+              <div key={entry.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2 border border-white/[0.07]">
+                <FolderOpen className="w-3.5 h-3.5 text-orange-400 shrink-0" />
                 <span className="text-xs font-mono flex-1 truncate">{entry.path}</span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="w-6 h-6 hover:bg-destructive/10 shrink-0"
-                  onClick={() => handleRemovePath(entry.id)}
-                >
+                <Button size="icon" variant="ghost" className="w-6 h-6 hover:bg-destructive/15 shrink-0" onClick={() => handleRemovePath(entry.id)}>
                   <Trash2 className="w-3 h-3" />
                 </Button>
               </div>
@@ -463,19 +406,13 @@ export default function Settings() {
               onKeyDown={e => e.key === "Enter" && handleAddPath()}
             />
             {isElectron && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 border border-white/10"
-                onClick={handleBrowsePath}
-                title="Browse for folder"
-              >
+              <Button size="icon" variant="ghost" className="h-8 w-8 glass-button" onClick={handleBrowsePath} title="Browse for folder">
                 <FolderOpen className="w-3.5 h-3.5" />
               </Button>
             )}
             <Button
               size="sm"
-              className="h-8 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+              className="h-8 text-xs btn-action"
               onClick={() => handleAddPath()}
               disabled={addPath.isPending || (!isElectron && !newPathInput.trim())}
             >
@@ -486,7 +423,7 @@ export default function Settings() {
         </Section>
 
         {/* Hotkey */}
-        <Section title="Global Hotkey" icon={Keyboard}>
+        <Section id="hotkey" title="Global Hotkey" icon={Keyboard}>
           <SettingRow label="Activation Hotkey" description="Press this combination to open AXIOM from anywhere">
             <Input
               value={settings.hotkey}
@@ -498,14 +435,14 @@ export default function Settings() {
           </SettingRow>
         </Section>
 
-        {/* Theme */}
-        <Section title="Appearance" icon={Monitor}>
+        {/* Appearance */}
+        <Section id="appearance" title="Appearance" icon={Monitor}>
           <SettingRow label="Theme">
             <Select value={settings.theme} onValueChange={v => update({ theme: v as "light" | "dark" | "system" })}>
               <SelectTrigger className="glass-input h-7 text-xs w-32" data-testid="select-theme">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="glass-panel border-white/10">
+              <SelectContent className="glass-panel border-white/[0.08]">
                 <SelectItem value="dark" className="text-xs">Dark</SelectItem>
                 <SelectItem value="light" className="text-xs">Light</SelectItem>
                 <SelectItem value="system" className="text-xs">System</SelectItem>
@@ -515,62 +452,68 @@ export default function Settings() {
         </Section>
 
         {/* Window behavior */}
-        <Section title="Window Behavior" icon={Monitor}>
+        <Section id="window" title="Window Behavior" icon={Monitor}>
           <SettingRow label="Launch at Login">
-            <Switch
-              checked={settings.launchAtLogin}
-              onCheckedChange={v => update({ launchAtLogin: v })}
-              data-testid="switch-launch-at-login"
-            />
+            <Switch checked={!!settings.launchAtLogin} onCheckedChange={v => update({ launchAtLogin: v })} data-testid="switch-launch-at-login" />
           </SettingRow>
           <SettingRow label="Start Minimized">
-            <Switch
-              checked={settings.startMinimized}
-              onCheckedChange={v => update({ startMinimized: v })}
-              data-testid="switch-start-minimized"
-            />
+            <Switch checked={!!settings.startMinimized} onCheckedChange={v => update({ startMinimized: v })} data-testid="switch-start-minimized" />
           </SettingRow>
           <SettingRow label="Dismiss on Focus Loss">
-            <Switch
-              checked={settings.dismissOnBlur}
-              onCheckedChange={v => update({ dismissOnBlur: v })}
-              data-testid="switch-dismiss-on-blur"
-            />
+            <Switch checked={!!settings.dismissOnBlur} onCheckedChange={v => update({ dismissOnBlur: v })} data-testid="switch-dismiss-on-blur" />
           </SettingRow>
         </Section>
 
         {/* Notifications */}
-        <Section title="Notifications" icon={Bell}>
+        <Section id="notifs" title="Notifications" icon={Bell}>
           <SettingRow label="Notify on Scheduled Task Complete">
-            <Switch
-              checked={settings.notifyOnSchedule}
-              onCheckedChange={v => update({ notifyOnSchedule: v })}
-              data-testid="switch-notify-schedule"
-            />
+            <Switch checked={!!settings.notifyOnSchedule} onCheckedChange={v => update({ notifyOnSchedule: v })} data-testid="switch-notify-schedule" />
           </SettingRow>
-          <SettingRow label="Notify on Error">
-            <Switch
-              checked={settings.notifyOnError}
-              onCheckedChange={v => update({ notifyOnError: v })}
-              data-testid="switch-notify-error"
-            />
+          <SettingRow label="Notify on File Operations">
+            <Switch checked={!!settings.notifyOnFileOp} onCheckedChange={v => update({ notifyOnFileOp: v })} data-testid="switch-notify-file-op" />
           </SettingRow>
         </Section>
 
-        {/* Onboarding */}
-        <Section title="Setup" icon={RefreshCw}>
-          <SettingRow label="Re-run Onboarding" description="Walk through the setup wizard again">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs border border-white/10 hover:bg-white/10"
-              onClick={handleRerunOnboarding}
-              data-testid="button-rerun-onboarding"
-            >
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Re-run
-            </Button>
-          </SettingRow>
+        {/* About */}
+        <Section id="about" title="About AXIOM" icon={Info}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">AXIOM Desktop</p>
+              <p className="text-xs text-muted-foreground">Version 1.0.0 · AI-powered desktop assistant</p>
+            </div>
+            <Badge className="ml-auto text-[10px] bg-indigo-500/15 text-indigo-300 border-indigo-500/25">Stable</Badge>
+          </div>
+          <Separator className="bg-white/[0.07]" />
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-lg bg-white/5 border border-white/[0.06] px-3 py-2.5">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wider mb-1">AI Mode</p>
+              <p className="font-medium capitalize">{settings.aiMode}</p>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/[0.06] px-3 py-2.5">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wider mb-1">Model</p>
+              <p className="font-medium font-mono truncate">{settings.aiModel}</p>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/[0.06] px-3 py-2.5">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wider mb-1">Allowed Paths</p>
+              <p className="font-medium">{allowedPaths.length} configured</p>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/[0.06] px-3 py-2.5">
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wider mb-1">Platform</p>
+              <p className="font-medium">{isElectron ? "Desktop (Electron)" : "Web"}</p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs text-muted-foreground hover:text-foreground w-full justify-start border border-transparent hover:border-white/10"
+            onClick={handleRerunOnboarding}
+            data-testid="button-rerun-onboarding"
+          >
+            Re-run onboarding wizard
+          </Button>
         </Section>
 
       </div>

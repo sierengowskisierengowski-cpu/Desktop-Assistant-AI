@@ -211,7 +211,7 @@
   }
   .glass-input {
     @apply bg-white/[0.04] backdrop-blur-sm border border-white/[0.09]
-           focus:border-white/30 focus:ring-1 focus:ring-white/20 transition-all duration-200;
+           focus:border-indigo-400/40 focus:ring-1 focus:ring-indigo-400/20 transition-all duration-200;
   }
   .glass-button {
     @apply bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-sm
@@ -219,6 +219,31 @@
            transition-all duration-200;
   }
 
+  /* ── Semantic action button colours ───────────────────────────── */
+  .btn-action {
+    @apply bg-indigo-500/15 text-indigo-300 border border-indigo-500/30
+           hover:bg-indigo-500/25 hover:border-indigo-500/45
+           transition-all duration-200;
+  }
+  .btn-sky {
+    @apply bg-sky-500/15 text-sky-300 border border-sky-500/30
+           hover:bg-sky-500/25 hover:border-sky-500/45
+           transition-all duration-200;
+  }
+  .btn-emerald {
+    @apply bg-emerald-500/15 text-emerald-300 border border-emerald-500/30
+           hover:bg-emerald-500/25 hover:border-emerald-500/45
+           transition-all duration-200;
+  }
+  .btn-amber {
+    @apply bg-amber-500/15 text-amber-300 border border-amber-500/30
+           hover:bg-amber-500/25 hover:border-amber-500/45
+           transition-all duration-200;
+  }
+  /* Active tab / selected item */
+  .tab-active {
+    @apply bg-indigo-500/12 text-indigo-300 border border-indigo-500/28;
+  }
   /* Active item border glow used across nav/tabs */
   .active-border {
     @apply border border-white/30 shadow-[0_0_0_1px_rgba(255,255,255,0.10)];

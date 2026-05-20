@@ -111,7 +111,7 @@ router.get("/activity/summary", async (_req, res) => {
   const [fileRow] = await db.select({ value: count() }).from(activityLogTable).where(eq(activityLogTable.type, "file_op"));
   const [schedRow] = await db.select({ value: count() }).from(activityLogTable).where(eq(activityLogTable.type, "scheduled"));
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [recentRow] = await db.select({ value: count() }).from(activityLogTable)
     .where(sql`created_at > ${since}`);
 

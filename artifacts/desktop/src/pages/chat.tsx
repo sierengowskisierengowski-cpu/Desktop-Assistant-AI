@@ -1,25 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { electron } from "@/lib/electron-api";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown, Mic, MicOff } from "lucide-react";
+import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown, Mic, MicOff, Search, Cloud, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  useListChatSessions,
-  getListChatSessionsQueryKey,
-  useGetChatSession,
-  getGetChatSessionQueryKey,
-  useCreateChatSession,
-  useDeleteChatSession,
-  useSendChatMessage,
-  getGetRecentChatsQueryKey,
-  useExecuteFileOp,
-  usePreviewFileOp,
+  useListChatSessions, getListChatSessionsQueryKey,
+  useGetChatSession, getGetChatSessionQueryKey,
+  useCreateChatSession, useDeleteChatSession, useSendChatMessage,
+  getGetRecentChatsQueryKey, useExecuteFileOp, usePreviewFileOp,
+  useGetSettings, getGetSettingsQueryKey,
+  useGetAiStatus, getGetAiStatusQueryKey,
 } from "@workspace/api-client-react";
 import type { ChatMessage, AiAction, FileOpExecuteInputOperation, FileOpPreview } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,7 +46,6 @@ function ActionCard({ action }: { action: AiAction }) {
   })();
 
   const isFileOp = !!(payload.path && payload.operation);
-
   if (dismissed) return null;
 
   const handlePreview = () => {
@@ -62,10 +58,7 @@ function ActionCard({ action }: { action: AiAction }) {
     previewFileOp.mutate(
       { data: { path: payload.path, operation: payload.operation, criteria: payload.criteria, destination: payload.destination } },
       {
-        onSuccess: (r) => {
-          setPreview(r);
-          setStep("preview_ready");
-        },
+        onSuccess: (r) => { setPreview(r); setStep("preview_ready"); },
         onError: () => {
           toast({ title: "Preview failed", description: "Could not list affected files — check allowed paths in Settings.", variant: "destructive" });
           setStep("idle");
@@ -98,12 +91,12 @@ function ActionCard({ action }: { action: AiAction }) {
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3"
+      className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3"
     >
       <div className="flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+        <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-primary mb-1">Action Required</p>
+          <p className="text-sm font-medium text-amber-300 mb-1">Action Required</p>
           <p className="text-xs text-muted-foreground">{action.description}</p>
           {isFileOp && payload.path && (
             <p className="text-[10px] text-muted-foreground/60 mt-0.5 font-mono">{payload.path}</p>
@@ -111,7 +104,6 @@ function ActionCard({ action }: { action: AiAction }) {
         </div>
       </div>
 
-      {/* Preview results */}
       <AnimatePresence>
         {preview && step !== "done" && (
           <motion.div
@@ -120,13 +112,10 @@ function ActionCard({ action }: { action: AiAction }) {
             exit={{ opacity: 0, height: 0 }}
             className="mt-3 rounded-lg border border-white/10 bg-white/5 overflow-hidden"
           >
-            <div
-              className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5"
-              onClick={() => setShowFiles(v => !v)}
-            >
+            <div className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5" onClick={() => setShowFiles(v => !v)}>
               <div className="flex items-center gap-1.5">
-                <FileText className="w-3 h-3 text-primary" />
-                <span className="text-xs font-medium text-primary">{preview.summary}</span>
+                <FileText className="w-3 h-3 text-amber-400" />
+                <span className="text-xs font-medium text-amber-300">{preview.summary}</span>
               </div>
               <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", showFiles && "rotate-180")} />
             </div>
@@ -141,14 +130,9 @@ function ActionCard({ action }: { action: AiAction }) {
                   </div>
                 ))}
                 {(preview.affectedFiles?.length ?? 0) > 30 && (
-                  <p className="text-[10px] text-muted-foreground/50 px-3 py-1">
-                    +{(preview.affectedFiles?.length ?? 0) - 30} more files
-                  </p>
+                  <p className="text-[10px] text-muted-foreground/50 px-3 py-1">+{(preview.affectedFiles?.length ?? 0) - 30} more</p>
                 )}
               </div>
-            )}
-            {showFiles && (!preview.affectedFiles || preview.affectedFiles.length === 0) && (
-              <p className="text-[10px] text-muted-foreground/50 px-3 py-2">No files would be affected.</p>
             )}
           </motion.div>
         )}
@@ -158,67 +142,39 @@ function ActionCard({ action }: { action: AiAction }) {
         <div className="flex gap-2 mt-3">
           {step === "idle" && (
             <>
-              <Button
-                size="sm"
-                className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
-                onClick={handlePreview}
-                data-testid="button-preview-action"
-              >
-                <FileText className="w-3 h-3 mr-1" />
-                Preview
+              <Button size="sm" className="h-7 text-xs btn-amber" onClick={handlePreview} data-testid="button-preview-action">
+                <FileText className="w-3 h-3 mr-1" />Preview
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setDismissed(true)}
-                data-testid="button-dismiss-action"
-              >
-                <XCircle className="w-3 h-3 mr-1" />
-                Cancel
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => setDismissed(true)} data-testid="button-dismiss-action">
+                <XCircle className="w-3 h-3 mr-1" />Cancel
               </Button>
             </>
           )}
           {step === "previewing" && (
-            <Button size="sm" disabled className="h-7 text-xs bg-primary/10 text-primary border border-primary/20">
-              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              Loading preview…
+            <Button size="sm" disabled className="h-7 text-xs btn-amber opacity-60">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />Loading preview…
             </Button>
           )}
           {step === "preview_ready" && (
             <>
-              <Button
-                size="sm"
-                className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
-                onClick={handleExecute}
-                data-testid="button-confirm-action"
-              >
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-                Execute
+              <Button size="sm" className="h-7 text-xs btn-emerald" onClick={handleExecute} data-testid="button-confirm-action">
+                <CheckCircle2 className="w-3 h-3 mr-1" />Execute
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setDismissed(true)}
-                data-testid="button-dismiss-action"
-              >
-                <XCircle className="w-3 h-3 mr-1" />
-                Cancel
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => setDismissed(true)} data-testid="button-dismiss-action">
+                <XCircle className="w-3 h-3 mr-1" />Cancel
               </Button>
             </>
           )}
           {step === "executing" && (
-            <Button size="sm" disabled className="h-7 text-xs bg-primary/10 text-primary border border-primary/20">
-              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              Executing…
+            <Button size="sm" disabled className="h-7 text-xs btn-emerald opacity-60">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />Executing…
             </Button>
           )}
         </div>
       )}
 
       {step === "done" && result && (
-        <div className={cn("flex items-center gap-1 mt-3 text-xs", result.success ? "text-green-400" : "text-destructive")}>
+        <div className={cn("flex items-center gap-1 mt-3 text-xs", result.success ? "text-emerald-400" : "text-destructive")}>
           {result.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
           {result.summary}
         </div>
@@ -227,7 +183,7 @@ function ActionCard({ action }: { action: AiAction }) {
   );
 }
 
-function MessageBubble({ msg, isLast }: { msg: ChatMessage; isLast: boolean }) {
+function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
 
   return (
@@ -239,16 +195,19 @@ function MessageBubble({ msg, isLast }: { msg: ChatMessage; isLast: boolean }) {
     >
       <div className={cn(
         "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-        isUser ? "bg-primary/20 border border-primary/30" : "bg-white/5 border border-white/10"
+        isUser ? "bg-indigo-500/20 border border-indigo-400/30" : "bg-sky-500/10 border border-sky-400/20"
       )}>
-        {isUser ? <User className="w-3.5 h-3.5 text-primary" /> : <Bot className="w-3.5 h-3.5 text-muted-foreground" />}
+        {isUser
+          ? <User className="w-3.5 h-3.5 text-indigo-400" />
+          : <Bot className="w-3.5 h-3.5 text-sky-400" />
+        }
       </div>
 
       <div className={cn("max-w-[75%] min-w-0", isUser ? "items-end" : "items-start")}>
         <div className={cn(
           "px-4 py-2.5 rounded-2xl text-sm leading-relaxed",
           isUser
-            ? "bg-primary/15 border border-primary/25 text-foreground rounded-tr-sm"
+            ? "bg-indigo-500/12 border border-indigo-400/20 text-foreground rounded-tr-sm"
             : "glass-card text-foreground rounded-tl-sm"
         )}>
           <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -276,6 +235,8 @@ function MessageBubble({ msg, isLast }: { msg: ChatMessage; isLast: boolean }) {
 export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [input, setInput] = useState("");
+  const [sessionSearch, setSessionSearch] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,11 +248,12 @@ export default function Chat() {
   const { data: sessions = [], isLoading: sessionsLoading } = useListChatSessions({
     query: { queryKey: getListChatSessionsQueryKey() },
   });
-
   const { data: activeSession, isLoading: messagesLoading } = useGetChatSession(
     activeSessionId ?? 0,
     { query: { enabled: !!activeSessionId, queryKey: getGetChatSessionQueryKey(activeSessionId ?? 0) } }
   );
+  const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
+  const { data: aiStatus } = useGetAiStatus({ query: { queryKey: getGetAiStatusQueryKey(), refetchInterval: 15000 } });
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -301,9 +263,7 @@ export default function Chat() {
   const sendMessage = useSendChatMessage();
 
   useEffect(() => {
-    if (!activeSessionId && sessions.length > 0) {
-      setActiveSessionId(sessions[0].id);
-    }
+    if (!activeSessionId && sessions.length > 0) setActiveSessionId(sessions[0].id);
   }, [sessions, activeSessionId]);
 
   useEffect(() => {
@@ -325,18 +285,15 @@ export default function Chat() {
 
   const handleDeleteSession = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteSession.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListChatSessionsQueryKey() });
-          if (activeSessionId === id) {
-            const remaining = sessions.filter(s => s.id !== id);
-            setActiveSessionId(remaining[0]?.id ?? null);
-          }
-        },
-      }
-    );
+    deleteSession.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListChatSessionsQueryKey() });
+        if (activeSessionId === id) {
+          const remaining = sessions.filter(s => s.id !== id);
+          setActiveSessionId(remaining[0]?.id ?? null);
+        }
+      },
+    });
   }, [deleteSession, queryClient, activeSessionId, sessions]);
 
   const handleSend = useCallback(async () => {
@@ -365,9 +322,6 @@ export default function Chat() {
 
     const apiBase = window.location.protocol === "file:" ? "http://127.0.0.1:8080" : "";
     const sseHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    // In packaged Electron (file://) attach the per-session auth token to the
-    // manual fetch — the generated client does this automatically, but SSE
-    // streaming bypasses it.
     if (window.location.protocol === "file:") {
       const tok = await electron.getLocalToken();
       if (tok) sseHeaders["Authorization"] = `Bearer ${tok}`;
@@ -394,10 +348,8 @@ export default function Chat() {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-
           const parts = buffer.split("\n\n");
           buffer = parts.pop() ?? "";
-
           for (const part of parts) {
             const lines = part.split("\n");
             let eventType = "";
@@ -441,33 +393,27 @@ export default function Chat() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SpeechRecognitionCtor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-
     if (!SpeechRecognitionCtor) {
       toast({ title: "Voice input not supported", description: "Your browser does not support speech recognition", variant: "destructive" });
       return;
     }
-
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
       return;
     }
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognition: any = new SpeechRecognitionCtor();
     recognition.lang = "en-US";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
-
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (e: any) => {
       setIsListening(false);
-      if (e.error !== "aborted") {
-        toast({ title: "Voice input error", description: e.error, variant: "destructive" });
-      }
+      if (e.error !== "aborted") toast({ title: "Voice input error", description: e.error, variant: "destructive" });
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (e: any) => {
@@ -475,56 +421,89 @@ export default function Chat() {
       setInput(prev => prev ? `${prev} ${transcript}` : transcript);
       textareaRef.current?.focus();
     };
-
     recognition.start();
   }, [isListening, toast]);
 
   const messages = activeSession?.messages ?? [];
+  const filteredSessions = sessions.filter(s =>
+    !sessionSearch || s.title.toLowerCase().includes(sessionSearch.toLowerCase())
+  );
+
+  const isCloud = settings?.aiMode === "cloud";
+  const modelName = settings?.aiModel ?? "…";
+  const aiOnline = isCloud ? true : aiStatus?.ollamaAvailable;
 
   return (
     <div className="flex h-full">
       {/* Session sidebar */}
-      <div className="w-52 shrink-0 border-r border-white/10 flex flex-col">
-        <div className="p-3 border-b border-white/10 flex items-center justify-between">
+      <div className="w-52 shrink-0 border-r border-white/[0.07] flex flex-col">
+        <div className="p-3 border-b border-white/[0.07] flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sessions</span>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="w-6 h-6 hover:bg-white/10"
-            onClick={handleNewSession}
-            disabled={createSession.isPending}
-            data-testid="button-new-session"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-6 h-6 hover:bg-white/10 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowSearch(v => !v)}
+              title="Search sessions"
+            >
+              <Search className="w-3 h-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-6 h-6 hover:bg-white/10 text-muted-foreground hover:text-foreground"
+              onClick={handleNewSession}
+              disabled={createSession.isPending}
+              data-testid="button-new-session"
+              title="New chat"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
+
+        {showSearch && (
+          <div className="px-2 py-1.5 border-b border-white/[0.07]">
+            <Input
+              value={sessionSearch}
+              onChange={e => setSessionSearch(e.target.value)}
+              placeholder="Search sessions..."
+              className="glass-input h-7 text-xs"
+              autoFocus
+            />
+          </div>
+        )}
+
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
             {sessionsLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-9 w-full rounded-lg bg-white/5" />
               ))
-            ) : sessions.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-8 px-3">No sessions yet. Start a new chat.</p>
+            ) : filteredSessions.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-8 px-3">
+                {sessionSearch ? "No sessions match." : "No sessions yet. Start a new chat."}
+              </p>
             ) : (
-              sessions.map((session) => (
+              filteredSessions.map((session) => (
                 <motion.div
                   key={session.id}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   className={cn(
-                    "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-all duration-150",
+                    "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-all duration-150 border",
                     activeSessionId === session.id
-                      ? "bg-primary/15 border border-primary/20"
-                      : "hover:bg-white/5"
+                      ? "bg-indigo-500/12 border-indigo-500/25 text-indigo-200"
+                      : "border-transparent hover:bg-white/5 hover:border-white/10"
                   )}
                   onClick={() => setActiveSessionId(session.id)}
                   data-testid={`session-item-${session.id}`}
                 >
-                  <MessageSquare className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs text-foreground/80 flex-1 truncate">{session.title}</span>
+                  <MessageSquare className={cn("w-3.5 h-3.5 shrink-0", activeSessionId === session.id ? "text-indigo-400" : "text-muted-foreground")} />
+                  <span className="text-xs flex-1 truncate">{session.title}</span>
                   <button
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                     onClick={(e) => handleDeleteSession(session.id, e)}
                     data-testid={`button-delete-session-${session.id}`}
                   >
@@ -540,25 +519,41 @@ export default function Chat() {
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium">
+        <div className="px-4 py-3 border-b border-white/[0.07] flex items-center gap-2">
+          <Bot className="w-4 h-4 text-sky-400 shrink-0" />
+          <span className="text-sm font-medium flex-1 truncate">
             {activeSession?.title || "Select a session"}
           </span>
-          {isStreaming && (
-            <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {streamingContent ? "Responding..." : "Thinking..."}
-            </div>
-          )}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            {isStreaming && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                {streamingContent ? "Responding…" : "Thinking…"}
+              </div>
+            )}
+            {settings && (
+              <div className={cn(
+                "flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border",
+                isCloud
+                  ? "bg-sky-500/10 border-sky-500/25 text-sky-300"
+                  : aiOnline
+                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                    : "bg-red-500/10 border-red-500/25 text-red-300"
+              )}>
+                {isCloud ? <Cloud className="w-2.5 h-2.5" /> : <Cpu className="w-2.5 h-2.5" />}
+                <span className="font-mono truncate max-w-[80px]">{modelName}</span>
+                <span className={cn("w-1.5 h-1.5 rounded-full", aiOnline ? "bg-emerald-400" : "bg-red-400")} />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
         <ScrollArea className="flex-1 px-4 py-4">
           {!activeSessionId ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <Bot className="w-8 h-8 text-primary" />
+              <div className="w-16 h-16 rounded-2xl bg-sky-500/10 border border-sky-400/20 flex items-center justify-center">
+                <Bot className="w-8 h-8 text-sky-400" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-foreground">No active session</p>
@@ -567,7 +562,7 @@ export default function Chat() {
               <Button
                 size="sm"
                 onClick={handleNewSession}
-                className="bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+                className="btn-action"
                 data-testid="button-start-chat"
               >
                 <Plus className="w-3.5 h-3.5 mr-1.5" />
@@ -579,106 +574,94 @@ export default function Chat() {
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className={cn("flex gap-3", i % 2 === 0 ? "" : "flex-row-reverse")}>
                   <Skeleton className="w-7 h-7 rounded-full bg-white/5 shrink-0" />
-                  <Skeleton className={cn("h-12 rounded-2xl bg-white/5", i % 2 === 0 ? "w-3/4" : "w-1/2")} />
+                  <Skeleton className={cn("h-16 rounded-2xl bg-white/5", i % 2 === 0 ? "w-2/3" : "w-1/2")} />
                 </div>
               ))}
             </div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-3">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-primary/60" />
-              </div>
-              <p className="text-sm text-muted-foreground">Ask AXIOM to do something...</p>
-              <div className="flex flex-wrap gap-2 justify-center max-w-xs">
-                {["Clean up my Downloads", "Organize my Desktop by type", "Find large files"].map(s => (
-                  <button
-                    key={s}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-muted-foreground hover:text-foreground transition-all"
-                    onClick={() => setInput(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
           ) : (
-            <div className="space-y-0">
-              <AnimatePresence initial={false}>
-                {messages.map((msg, i) => (
-                  <MessageBubble key={msg.id} msg={msg} isLast={i === messages.length - 1} />
-                ))}
-              </AnimatePresence>
-              {isStreaming && (
+            <>
+              {messages.map((msg) => (
+                <MessageBubble key={msg.id} msg={msg} />
+              ))}
+              {isStreaming && streamingContent && (
                 <motion.div
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="flex gap-3 mb-4"
                 >
-                  <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5 shrink-0">
-                    <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="w-7 h-7 rounded-full bg-sky-500/10 border border-sky-400/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Bot className="w-3.5 h-3.5 text-sky-400" />
                   </div>
-                  {streamingContent ? (
-                    <div className="glass-card px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed max-w-[75%]">
-                      <p className="whitespace-pre-wrap break-words">{streamingContent}</p>
-                      <span className="inline-block w-1 h-3.5 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                  <div className="glass-card px-4 py-2.5 rounded-2xl rounded-tl-sm max-w-[75%]">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{streamingContent}</p>
+                    <span className="inline-block w-1.5 h-4 bg-sky-400 ml-0.5 animate-pulse rounded-sm" />
+                  </div>
+                </motion.div>
+              )}
+              {isStreaming && !streamingContent && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3 mb-4">
+                  <div className="w-7 h-7 rounded-full bg-sky-500/10 border border-sky-400/20 flex items-center justify-center shrink-0">
+                    <Loader2 className="w-3.5 h-3.5 text-sky-400 animate-spin" />
+                  </div>
+                  <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-sm">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map(i => (
+                        <span key={i} className="w-1.5 h-1.5 bg-sky-400/60 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                      ))}
                     </div>
-                  ) : (
-                    <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                  )}
+                  </div>
                 </motion.div>
               )}
               <div ref={bottomRef} />
-            </div>
+            </>
           )}
         </ScrollArea>
 
         {/* Input */}
-        <div className="p-3 border-t border-white/10">
+        <div className="px-4 py-3 border-t border-white/[0.07]">
           <div className="flex gap-2 items-end">
             <Textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask AXIOM to organize files, run a task, or answer a question..."
-              className="min-h-[44px] max-h-[120px] resize-none glass-input rounded-xl text-sm py-2.5 flex-1"
+              className="glass-input flex-1 resize-none min-h-[40px] max-h-32 text-sm py-2.5 leading-relaxed"
               rows={1}
-              disabled={isStreaming}
               data-testid="input-chat-message"
             />
             <Button
               size="icon"
-              type="button"
+              variant="ghost"
+              className={cn(
+                "h-10 w-10 shrink-0 rounded-xl border transition-all duration-200",
+                isListening
+                  ? "bg-rose-500/20 border-rose-400/40 text-rose-300"
+                  : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground"
+              )}
               onClick={handleVoiceInput}
               title={isListening ? "Stop listening" : "Voice input"}
-              className={cn(
-                "h-10 w-10 shrink-0 rounded-xl border transition-colors",
-                isListening
-                  ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 animate-pulse"
-                  : "bg-white/5 hover:bg-white/10 text-muted-foreground border-white/10"
-              )}
               data-testid="button-voice-input"
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
             <Button
               size="icon"
+              className={cn(
+                "h-10 w-10 shrink-0 rounded-xl transition-all duration-200",
+                input.trim() && !isStreaming
+                  ? "bg-indigo-500/25 border border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/35"
+                  : "bg-white/5 border border-white/10 text-muted-foreground cursor-not-allowed"
+              )}
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
-              className="h-10 w-10 shrink-0 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 disabled:opacity-40"
               data-testid="button-send-message"
             >
-              {isStreaming
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Send className="w-4 h-4" />}
+              {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground/40 mt-1.5 px-1">
-            {isListening ? "🎤 Listening… click mic to stop" : "Enter to send · Shift+Enter for new line · Mic for voice"}
+          <p className="text-[10px] text-muted-foreground/40 mt-1.5 px-0.5">
+            Enter to send · Shift+Enter for new line · Mic for voice
           </p>
         </div>
       </div>
