@@ -27,13 +27,20 @@ app.use(
 );
 app.use(cors({
   origin: (origin, callback) => {
+    // No origin = same-origin or non-browser request (e.g. Electron IPC, curl)
     if (!origin) return callback(null, true);
+    let hostname: string;
+    try {
+      hostname = new URL(origin).hostname;
+    } catch {
+      return callback(new Error("CORS: malformed origin"));
+    }
     const allowed =
-      origin.startsWith("http://localhost") ||
-      origin.startsWith("http://127.0.0.1") ||
-      origin.includes(".replit.dev") ||
-      origin.includes(".repl.co") ||
-      origin.includes(".replit.app");
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".replit.dev") ||
+      hostname.endsWith(".repl.co") ||
+      hostname.endsWith(".replit.app");
     if (allowed) return callback(null, true);
     callback(new Error("CORS: origin not permitted"));
   },
