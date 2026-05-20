@@ -100,12 +100,25 @@ AXIOM auto-detects Ollama at `http://localhost:11434`. You can override the URL 
 
 ## Building from Source
 
-### Requirements
-- [Node.js](https://nodejs.org) 18+
-- [pnpm](https://pnpm.io) 8+
-- [Ollama](https://ollama.ai) (optional, for local AI)
+### Step 1 — Install Node.js and pnpm
 
-### Clone & install
+> **You only need to do this once per machine.**
+
+1. Install [Node.js LTS](https://nodejs.org) (v18 or newer)
+2. Install pnpm:
+
+```bash
+npm install -g pnpm
+```
+
+Verify both are working:
+
+```bash
+node --version    # should print v18.x or higher
+pnpm --version    # should print 8.x or higher
+```
+
+### Step 2 — Clone and install dependencies
 
 ```bash
 git clone https://github.com/josephsierengowski/axiom.git
@@ -113,7 +126,7 @@ cd axiom
 pnpm install
 ```
 
-### Run in development
+### Step 3 — Run in development
 
 ```bash
 # Terminal 1 — API server (port 8080)
@@ -126,10 +139,14 @@ pnpm --filter @workspace/desktop run dev
 pnpm --filter @workspace/desktop run electron:dev
 ```
 
-### Build a distributable installer
+### Step 4 — Build a distributable installer
+
+> **Important:** Each installer must be built on its target OS.
+> Build the `.dmg` on a Mac, the `.exe` on Windows, the `.AppImage` on Linux.
 
 ```bash
 # macOS — .dmg + .zip (Intel + Apple Silicon)
+# Must be run on macOS
 pnpm --filter @workspace/desktop run electron:pack:mac
 
 # Windows — NSIS installer .exe
