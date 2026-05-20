@@ -469,8 +469,8 @@ export default function Settings() {
           <SettingRow label="Notify on Scheduled Task Complete">
             <Switch checked={!!settings.notifyOnSchedule} onCheckedChange={v => update({ notifyOnSchedule: v })} data-testid="switch-notify-schedule" />
           </SettingRow>
-          <SettingRow label="Notify on File Operations">
-            <Switch checked={!!settings.notifyOnFileOp} onCheckedChange={v => update({ notifyOnFileOp: v })} data-testid="switch-notify-file-op" />
+          <SettingRow label="Notify on Errors">
+            <Switch checked={!!settings.notifyOnError} onCheckedChange={v => update({ notifyOnError: v })} data-testid="switch-notify-error" />
           </SettingRow>
         </Section>
 
