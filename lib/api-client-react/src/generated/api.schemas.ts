@@ -359,6 +359,34 @@ export interface ModelPullStatus {
   status: string;
   /** @nullable */
   progress?: number | null;
+  /** @nullable */
+  total?: number | null;
+  /** @nullable */
+  completed?: number | null;
+}
+
+export type ModelPullProgressStatus = typeof ModelPullProgressStatus[keyof typeof ModelPullProgressStatus];
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ModelPullProgressStatus = {
+  pulling: "pulling",
+  complete: "complete",
+  error: "error",
+  unknown: "unknown",
+} as const;
+
+export interface ModelPullProgress {
+  name: string;
+  status: ModelPullProgressStatus;
+  progress: number;
+  total?: number;
+  completed?: number;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  error?: string | null;
 }
 
 export interface FileScanInput {

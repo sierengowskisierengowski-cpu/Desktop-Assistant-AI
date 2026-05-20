@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ import {
   useListAiModels, getListAiModelsQueryKey,
   usePullAiModel,
   useDeleteAiModel,
+  useGetModelPullStatus,
+  getGetModelPullStatusQueryKey,
 } from "@workspace/api-client-react";
 import type { AppSettings, AppSettingsUpdate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,6 +59,7 @@ export default function Settings() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [pullModelName, setPullModelName] = useState("");
+  const [activePulling, setActivePulling] = useState<string | null>(null);
 
   const { data: settings, isLoading } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
   const { data: aiStatus } = useGetAiStatus({
@@ -64,26 +67,56 @@ export default function Settings() {
   });
   const { data: models = [] } = useListAiModels({ query: { queryKey: getListAiModelsQueryKey() } });
 
+  const { data: pullStatus } = useGetModelPullStatus(activePulling ?? "", {
+    query: {
+      queryKey: getGetModelPullStatusQueryKey(activePulling ?? ""),
+      enabled: !!activePulling,
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return 1500;
+        if (data.status === "pulling") return 1500;
+        return false;
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (!pullStatus || !activePulling) return;
+    if (pullStatus.status === "complete") {
+      toast({ title: `Model "${activePulling}" ready`, description: "Model downloaded successfully" });
+      setActivePulling(null);
+      queryClient.invalidateQueries({ queryKey: getListAiModelsQueryKey() });
+    } else if (pullStatus.status === "error") {
+      toast({ title: `Pull failed`, description: pullStatus.error || "Unknown error", variant: "destructive" });
+      setActivePulling(null);
+    }
+  }, [pullStatus, activePulling, toast, queryClient]);
+
   const updateSettings = useUpdateSettings();
   const pullModel = usePullAiModel();
   const deleteModel = useDeleteAiModel();
 
-  const update = (patch: AppSettingsUpdate) => {
+  const update = useCallback((patch: AppSettingsUpdate) => {
     updateSettings.mutate({ data: patch }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
       },
       onError: () => toast({ title: "Settings update failed", variant: "destructive" }),
     });
-  };
+  }, [updateSettings, queryClient, toast]);
 
   const handlePullModel = () => {
     if (!pullModelName.trim()) return;
-    pullModel.mutate({ data: { name: pullModelName.trim() } }, {
+    const name = pullModelName.trim();
+    pullModel.mutate({ data: { name } }, {
       onSuccess: () => {
-        toast({ title: `Pulling ${pullModelName}...`, description: "This may take a few minutes" });
+        toast({ title: `Pulling ${name}…`, description: "Downloading in background — progress shown below" });
         setPullModelName("");
-        setTimeout(() => queryClient.invalidateQueries({ queryKey: getListAiModelsQueryKey() }), 3000);
+        setActivePulling(name);
+      },
+      onError: (e: unknown) => {
+        const msg = e instanceof Error ? e.message : "Check that Ollama is running";
+        toast({ title: "Pull failed", description: msg, variant: "destructive" });
       },
     });
   };
@@ -174,11 +207,23 @@ export default function Settings() {
                 {aiStatus?.ollamaAvailable
                   ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                   : <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-                <span className={aiStatus?.ollamaAvailable ? "text-green-300" : "text-amber-300"}>
+                <span className={cn("flex-1", aiStatus?.ollamaAvailable ? "text-green-300" : "text-amber-300")}>
                   {aiStatus?.ollamaAvailable
                     ? `Ollama connected · v${aiStatus.ollamaVersion || "unknown"}`
                     : "Ollama not detected — install from ollama.ai and run `ollama serve`"}
                 </span>
+                {!aiStatus?.ollamaAvailable && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-[10px] px-2 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 shrink-0"
+                    onClick={() => update({ aiMode: "cloud" })}
+                    data-testid="button-fallback-to-cloud"
+                  >
+                    <Cloud className="w-2.5 h-2.5 mr-1" />
+                    Use Cloud
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -235,10 +280,34 @@ export default function Settings() {
                     ))}
                   </div>
                 )}
+                {/* Active pull progress */}
+                {activePulling && pullStatus && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-primary font-medium flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        Pulling {activePulling}…
+                      </span>
+                      <span className="text-muted-foreground">{pullStatus.progress ?? 0}%</span>
+                    </div>
+                    <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-500"
+                        style={{ width: `${pullStatus.progress ?? 0}%` }}
+                      />
+                    </div>
+                    {pullStatus.total != null && pullStatus.total > 0 && (
+                      <p className="text-[10px] text-muted-foreground/60">
+                        {((pullStatus.completed ?? 0) / 1e9).toFixed(1)} / {(pullStatus.total / 1e9).toFixed(1)} GB
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2 mt-2">
                   <Input
                     value={pullModelName}
                     onChange={e => setPullModelName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handlePullModel()}
                     placeholder="llama3, mistral, phi3..."
                     className="glass-input h-7 text-xs flex-1"
                     data-testid="input-pull-model"
@@ -248,7 +317,7 @@ export default function Settings() {
                     variant="ghost"
                     className="h-7 text-xs border border-white/10"
                     onClick={handlePullModel}
-                    disabled={!pullModelName.trim() || pullModel.isPending}
+                    disabled={!pullModelName.trim() || pullModel.isPending || !!activePulling}
                     data-testid="button-pull-model"
                   >
                     {pullModel.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Pull"}

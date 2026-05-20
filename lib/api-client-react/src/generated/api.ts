@@ -48,6 +48,7 @@ import type {
   MessageInput,
   MessageResponse,
   ModelPullInput,
+  ModelPullProgress,
   ModelPullStatus,
   QuickAction,
   QuickActionInput,
@@ -1101,6 +1102,36 @@ export const useToggleScheduledTask = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getToggleScheduledTaskMutationOptions(options));
     }
+
+export const getModelPullStatusUrl = (name: string) => `/api/ai/models/pull/status/${encodeURIComponent(name)}`;
+
+export const getModelPullStatus = async (name: string, options?: RequestInit): Promise<ModelPullProgress> => {
+  return customFetch<ModelPullProgress>(getModelPullStatusUrl(name), { ...options, method: 'GET' });
+};
+
+export const getGetModelPullStatusQueryKey = (name: string) => [`/api/ai/models/pull/status`, name] as const;
+
+export const getGetModelPullStatusQueryOptions = <TData = Awaited<ReturnType<typeof getModelPullStatus>>, TError = ErrorType<unknown>>(
+  name: string,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getModelPullStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch> }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetModelPullStatusQueryKey(name);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getModelPullStatus>>> = ({ signal }) => getModelPullStatus(name, { signal, ...requestOptions });
+  return { queryKey, queryFn, enabled: !!name, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getModelPullStatus>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type GetModelPullStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getModelPullStatus>>>;
+export type GetModelPullStatusQueryError = ErrorType<unknown>;
+
+export function useGetModelPullStatus<TData = Awaited<ReturnType<typeof getModelPullStatus>>, TError = ErrorType<unknown>>(
+  name: string,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getModelPullStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetModelPullStatusQueryOptions(name, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getTaskRunLogsUrl = (id: number) => `/api/scheduler/tasks/${id}/logs`;
 

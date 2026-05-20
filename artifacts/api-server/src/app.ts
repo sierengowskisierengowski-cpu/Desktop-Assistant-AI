@@ -25,7 +25,20 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed =
+      origin.startsWith("http://localhost") ||
+      origin.startsWith("http://127.0.0.1") ||
+      origin.includes(".replit.dev") ||
+      origin.includes(".repl.co") ||
+      origin.includes(".replit.app");
+    if (allowed) return callback(null, true);
+    callback(new Error("CORS: origin not permitted"));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

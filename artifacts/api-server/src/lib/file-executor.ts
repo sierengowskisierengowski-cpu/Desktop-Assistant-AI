@@ -115,6 +115,7 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
   let affected = files.filter(f => f.type === "file");
   const details: string[] = [];
   const undoFiles: Array<{ tempPath: string; originalPath: string }> = [];
+  const undoMoves: Array<{ from: string; to: string }> = [];
   let processed = 0;
 
   if (params.operation === "delete") {
@@ -133,8 +134,10 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
       const folder = f.extension ? (TYPE_MAP[f.extension] || "Other") : "Other";
       const destDir = path.join(params.path, folder);
       await fs.mkdir(destDir, { recursive: true });
+      const destPath = path.join(destDir, f.name);
       try {
-        await fs.rename(f.path, path.join(destDir, f.name));
+        await fs.rename(f.path, destPath);
+        undoMoves.push({ from: f.path, to: destPath });
         details.push(`Moved ${f.name} → ${folder}/`);
         processed++;
       } catch {}
@@ -142,8 +145,10 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
   } else if (params.operation === "move" && params.destination) {
     await fs.mkdir(params.destination, { recursive: true });
     for (const f of affected) {
+      const destPath = path.join(params.destination, f.name);
       try {
-        await fs.rename(f.path, path.join(params.destination, f.name));
+        await fs.rename(f.path, destPath);
+        undoMoves.push({ from: f.path, to: destPath });
         details.push(`Moved: ${f.name}`);
         processed++;
       } catch {}
@@ -187,6 +192,7 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
         const destPath = path.join(path.dirname(f.path), newName);
         try {
           await fs.rename(f.path, destPath);
+          undoMoves.push({ from: f.path, to: destPath });
           details.push(`Renamed: ${f.name} → ${newName}`);
           processed++;
         } catch {}
@@ -195,7 +201,11 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     }
   }
 
-  const undoKey = undoFiles.length > 0 ? JSON.stringify({ files: undoFiles }) : null;
+  const undoKey = undoFiles.length > 0
+    ? JSON.stringify({ files: undoFiles })
+    : undoMoves.length > 0
+      ? JSON.stringify({ moves: undoMoves })
+      : null;
 
   if (!params.skipActivityLog) {
     await db.insert(activityLogTable).values({
@@ -203,7 +213,7 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
       description: `${params.operation} on ${params.path}`,
       detail: details.slice(0, 5).join(", "),
       filesAffected: JSON.stringify(files.filter(f => f.type === "file").slice(0, processed).map(f => f.path)),
-      undoable: undoFiles.length > 0,
+      undoable: undoKey !== null,
       undoData: undoKey,
     });
   }

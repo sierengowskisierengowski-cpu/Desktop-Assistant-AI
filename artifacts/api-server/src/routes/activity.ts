@@ -42,12 +42,24 @@ router.post("/activity/:id/undo", async (req, res) => {
   const filesRestored: string[] = [];
   if (entry.undoData) {
     try {
-      const undoInfo = JSON.parse(entry.undoData) as { files: Array<{ tempPath: string; originalPath: string }> };
+      const undoInfo = JSON.parse(entry.undoData) as {
+        files?: Array<{ tempPath: string; originalPath: string }>;
+        moves?: Array<{ from: string; to: string }>;
+      };
+      // Undo delete/dedup: move from temp dir back to original path
       for (const f of undoInfo.files || []) {
         try {
           await fs.mkdir(path.dirname(f.originalPath), { recursive: true });
           await fs.rename(f.tempPath, f.originalPath);
           filesRestored.push(f.originalPath);
+        } catch {}
+      }
+      // Undo move/organize/rename: reverse each source→dest mapping
+      for (const m of (undoInfo.moves || []).reverse()) {
+        try {
+          await fs.mkdir(path.dirname(m.from), { recursive: true });
+          await fs.rename(m.to, m.from);
+          filesRestored.push(m.from);
         } catch {}
       }
     } catch {}
