@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, CheckCircle2, XCircle, Loader2, CalendarClock } from "lucide-react";
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, CheckCircle2, XCircle, Loader2, CalendarClock, ChevronDown, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
   useRunScheduledTask,
   useToggleScheduledTask,
   useGetSchedulerStatus, getGetSchedulerStatusQueryKey,
+  useGetTaskRunLogs,
 } from "@workspace/api-client-react";
 import type { ScheduledTask } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,12 +51,51 @@ function formatRelative(date: string | null | undefined): string {
   return diff > 0 ? `in ${dy}d` : `${dy}d ago`;
 }
 
+function TaskRunLog({ taskId }: { taskId: number }) {
+  const { data: logs = [], isLoading } = useGetTaskRunLogs({ id: taskId });
+
+  if (isLoading) {
+    return (
+      <div className="pt-2 space-y-1.5">
+        {[0, 1].map(i => <Skeleton key={i} className="h-8 w-full rounded-lg bg-white/5" />)}
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <p className="pt-2 text-[11px] text-muted-foreground/60 italic">No runs yet — click Run Now to trigger this task.</p>
+    );
+  }
+
+  return (
+    <div className="pt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+      {logs.map((log) => (
+        <div key={log.id} className="flex items-start gap-2 rounded-lg bg-white/5 px-2.5 py-2">
+          {log.detail?.toLowerCase().includes("error") || log.detail?.toLowerCase().includes("failed") ? (
+            <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3 text-green-400 mt-0.5 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-foreground/80 leading-relaxed">{log.detail || log.description}</p>
+            <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+              {log.createdAt ? formatRelative(log.createdAt) : ""}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TaskCard({ task, onRun, onToggle, onDelete }: {
   task: ScheduledTask;
   onRun: (id: number) => void;
   onToggle: (id: number) => void;
   onDelete: (id: number) => void;
 }) {
+  const [showLog, setShowLog] = useState(false);
   const statusColor = task.lastRunStatus === "success" ? "text-green-400" : task.lastRunStatus === "error" ? "text-red-400" : "text-muted-foreground";
 
   return (
@@ -65,79 +105,105 @@ function TaskCard({ task, onRun, onToggle, onDelete }: {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
-        "glass-card rounded-xl p-4 border transition-all duration-200",
+        "glass-card rounded-xl border transition-all duration-200",
         task.enabled ? "border-white/10 hover:border-white/20" : "border-white/5 opacity-60"
       )}
       data-testid={`task-card-${task.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <CalendarClock className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="text-sm font-medium truncate">{task.name}</span>
-            {task.enabled ? (
-              <Badge className="text-[10px] h-4 px-1.5 bg-green-500/10 text-green-400 border-green-500/20">Active</Badge>
-            ) : (
-              <Badge className="text-[10px] h-4 px-1.5 bg-white/5 text-muted-foreground border-white/10">Paused</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground truncate mb-3">{task.command}</p>
-
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              <span>{task.scheduleLabel || task.schedule}</span>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarClock className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="text-sm font-medium truncate">{task.name}</span>
+              {task.enabled ? (
+                <Badge className="text-[10px] h-4 px-1.5 bg-green-500/10 text-green-400 border-green-500/20">Active</Badge>
+              ) : (
+                <Badge className="text-[10px] h-4 px-1.5 bg-white/5 text-muted-foreground border-white/10">Paused</Badge>
+              )}
             </div>
-            {task.lastRunAt && (
-              <div className={cn("flex items-center gap-1", statusColor)}>
-                {task.lastRunStatus === "success" ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                <span>Last: {formatRelative(task.lastRunAt)}</span>
-              </div>
-            )}
-            {task.nextRunAt && task.enabled && (
-              <div className="flex items-center gap-1 text-primary/70">
-                <Clock className="w-3 h-3" />
-                <span>Next: {formatRelative(task.nextRunAt)}</span>
-              </div>
-            )}
-          </div>
-        </div>
+            <p className="text-xs text-muted-foreground truncate mb-3">{task.command}</p>
 
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="w-7 h-7 hover:bg-primary/10 hover:text-primary"
-            onClick={() => onRun(task.id)}
-            title="Run now"
-            data-testid={`button-run-task-${task.id}`}
-          >
-            <Play className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="w-7 h-7 hover:bg-white/10"
-            onClick={() => onToggle(task.id)}
-            title={task.enabled ? "Pause" : "Enable"}
-            data-testid={`button-toggle-task-${task.id}`}
-          >
-            {task.enabled
-              ? <ToggleRight className="w-4 h-4 text-primary" />
-              : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => onDelete(task.id)}
-            title="Delete"
-            data-testid={`button-delete-task-${task.id}`}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>{task.scheduleLabel || task.schedule}</span>
+              </div>
+              {task.lastRunAt && (
+                <div className={cn("flex items-center gap-1", statusColor)}>
+                  {task.lastRunStatus === "success" ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                  <span>Last: {formatRelative(task.lastRunAt)}</span>
+                </div>
+              )}
+              {task.nextRunAt && task.enabled && (
+                <div className="flex items-center gap-1 text-primary/70">
+                  <Clock className="w-3 h-3" />
+                  <span>Next: {formatRelative(task.nextRunAt)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-7 h-7 hover:bg-primary/10 hover:text-primary"
+              onClick={() => onRun(task.id)}
+              title="Run now"
+              data-testid={`button-run-task-${task.id}`}
+            >
+              <Play className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-7 h-7 hover:bg-white/10"
+              onClick={() => onToggle(task.id)}
+              title={task.enabled ? "Pause" : "Enable"}
+              data-testid={`button-toggle-task-${task.id}`}
+            >
+              {task.enabled
+                ? <ToggleRight className="w-4 h-4 text-primary" />
+                : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => onDelete(task.id)}
+              title="Delete"
+              data-testid={`button-delete-task-${task.id}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Run log toggle */}
+      <div
+        className="px-4 py-2 border-t border-white/5 flex items-center gap-1.5 cursor-pointer hover:bg-white/5 transition-colors"
+        onClick={() => setShowLog(v => !v)}
+        data-testid={`button-show-log-${task.id}`}
+      >
+        <ScrollText className="w-3 h-3 text-muted-foreground/60" />
+        <span className="text-[11px] text-muted-foreground/60">Run log</span>
+        <ChevronDown className={cn("w-3 h-3 text-muted-foreground/50 ml-auto transition-transform", showLog && "rotate-180")} />
+      </div>
+
+      <AnimatePresence>
+        {showLog && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-4 pb-3 overflow-hidden"
+          >
+            <TaskRunLog taskId={task.id} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -189,7 +255,8 @@ export default function Scheduler() {
     runTask.mutate({ id }, {
       onSuccess: (r) => {
         invalidate();
-        toast({ title: r.success ? "Task completed" : "Task failed", description: r.output?.slice(0, 100) });
+        queryClient.invalidateQueries({ queryKey: ["scheduler", "tasks", id, "logs"] });
+        toast({ title: r.success ? "Task completed" : "Task failed", description: r.output?.slice(0, 120) });
       },
     });
   };

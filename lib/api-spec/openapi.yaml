@@ -257,6 +257,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/TaskRunResult"
 
+  /scheduler/tasks/{id}/logs:
+    get:
+      operationId: getTaskRunLogs
+      tags: [scheduler]
+      summary: Get run log entries for a specific task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Run log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+
   /scheduler/tasks/{id}/toggle:
     post:
       operationId: toggleScheduledTask
@@ -621,6 +642,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelPullStatus"
+
+  /ai/models/pull/status/{name}:
+    get:
+      operationId: getModelPullStatus
+      tags: [ai]
+      summary: Get real-time progress for an ongoing model pull
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pull progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelPullProgress"
 
   /ai/models/{name}:
     delete:
@@ -1271,6 +1311,34 @@ components:
           type: string
         progress:
           type: ["number", "null"]
+        total:
+          type: ["integer", "null"]
+        completed:
+          type: ["integer", "null"]
+
+    ModelPullProgress:
+      type: object
+      required: [name, status, progress]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [pulling, complete, error, unknown]
+        progress:
+          type: number
+        total:
+          type: integer
+        completed:
+          type: integer
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        error:
+          type: ["string", "null"]
 
     # ── Files ────────────────────────────────────────────────────────────────
     FileScanInput:

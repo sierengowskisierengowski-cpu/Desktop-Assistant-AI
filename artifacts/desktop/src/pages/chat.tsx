@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,8 +18,9 @@ import {
   useSendChatMessage,
   getGetRecentChatsQueryKey,
   useExecuteFileOp,
+  usePreviewFileOp,
 } from "@workspace/api-client-react";
-import type { ChatMessage, AiAction, FileOpExecuteInputOperation } from "@workspace/api-client-react";
+import type { ChatMessage, AiAction, FileOpExecuteInputOperation, FileOpPreview } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface FileOpPayload {
@@ -29,10 +30,16 @@ interface FileOpPayload {
   destination?: string;
 }
 
+type ActionStep = "idle" | "previewing" | "preview_ready" | "executing" | "done";
+
 function ActionCard({ action }: { action: AiAction }) {
   const [dismissed, setDismissed] = useState(false);
+  const [step, setStep] = useState<ActionStep>("idle");
+  const [preview, setPreview] = useState<FileOpPreview | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
   const [result, setResult] = useState<{ success: boolean; summary: string } | null>(null);
   const { toast } = useToast();
+  const previewFileOp = usePreviewFileOp();
   const executeFileOp = useExecuteFileOp();
 
   const payload: FileOpPayload = (() => {
@@ -44,20 +51,42 @@ function ActionCard({ action }: { action: AiAction }) {
 
   if (dismissed) return null;
 
-  const handleConfirm = () => {
+  const handlePreview = () => {
     if (!isFileOp || !payload.path || !payload.operation) {
       setResult({ success: true, summary: "Action acknowledged" });
+      setStep("done");
       return;
     }
+    setStep("previewing");
+    previewFileOp.mutate(
+      { data: { path: payload.path, operation: payload.operation, criteria: payload.criteria, destination: payload.destination } },
+      {
+        onSuccess: (r) => {
+          setPreview(r);
+          setStep("preview_ready");
+        },
+        onError: () => {
+          toast({ title: "Preview failed", description: "Could not list affected files — check allowed paths in Settings.", variant: "destructive" });
+          setStep("idle");
+        },
+      }
+    );
+  };
+
+  const handleExecute = () => {
+    if (!payload.path || !payload.operation) return;
+    setStep("executing");
     executeFileOp.mutate(
       { data: { path: payload.path, operation: payload.operation, criteria: payload.criteria, destination: payload.destination, confirmed: true } },
       {
         onSuccess: (r) => {
           setResult({ success: true, summary: r.summary });
+          setStep("done");
           toast({ title: "Action completed", description: r.summary });
         },
         onError: () => {
           setResult({ success: false, summary: "Operation failed — check allowed paths in Settings." });
+          setStep("done");
           toast({ title: "Action failed", variant: "destructive" });
         },
       }
@@ -80,35 +109,115 @@ function ActionCard({ action }: { action: AiAction }) {
           )}
         </div>
       </div>
-      {!result && (
+
+      {/* Preview results */}
+      <AnimatePresence>
+        {preview && step !== "done" && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 rounded-lg border border-white/10 bg-white/5 overflow-hidden"
+          >
+            <div
+              className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5"
+              onClick={() => setShowFiles(v => !v)}
+            >
+              <div className="flex items-center gap-1.5">
+                <FileText className="w-3 h-3 text-primary" />
+                <span className="text-xs font-medium text-primary">{preview.summary}</span>
+              </div>
+              <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", showFiles && "rotate-180")} />
+            </div>
+            {showFiles && preview.affectedFiles && preview.affectedFiles.length > 0 && (
+              <div className="border-t border-white/10 max-h-36 overflow-y-auto">
+                {preview.affectedFiles.slice(0, 30).map((f, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1 hover:bg-white/5">
+                    <span className="text-[10px] text-muted-foreground font-mono truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-muted-foreground/50 ml-2 shrink-0">
+                      {f.size > 1e6 ? `${(f.size / 1e6).toFixed(1)}MB` : `${Math.round(f.size / 1024)}KB`}
+                    </span>
+                  </div>
+                ))}
+                {(preview.affectedFiles?.length ?? 0) > 30 && (
+                  <p className="text-[10px] text-muted-foreground/50 px-3 py-1">
+                    +{(preview.affectedFiles?.length ?? 0) - 30} more files
+                  </p>
+                )}
+              </div>
+            )}
+            {showFiles && (!preview.affectedFiles || preview.affectedFiles.length === 0) && (
+              <p className="text-[10px] text-muted-foreground/50 px-3 py-2">No files would be affected.</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {step !== "done" && (
         <div className="flex gap-2 mt-3">
-          <Button
-            size="sm"
-            className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
-            onClick={handleConfirm}
-            disabled={executeFileOp.isPending}
-            data-testid="button-confirm-action"
-          >
-            {executeFileOp.isPending
-              ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              : <CheckCircle2 className="w-3 h-3 mr-1" />}
-            Confirm
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setDismissed(true)}
-            disabled={executeFileOp.isPending}
-            data-testid="button-dismiss-action"
-          >
-            <XCircle className="w-3 h-3 mr-1" />
-            Cancel
-          </Button>
+          {step === "idle" && (
+            <>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+                onClick={handlePreview}
+                data-testid="button-preview-action"
+              >
+                <FileText className="w-3 h-3 mr-1" />
+                Preview
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setDismissed(true)}
+                data-testid="button-dismiss-action"
+              >
+                <XCircle className="w-3 h-3 mr-1" />
+                Cancel
+              </Button>
+            </>
+          )}
+          {step === "previewing" && (
+            <Button size="sm" disabled className="h-7 text-xs bg-primary/10 text-primary border border-primary/20">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              Loading preview…
+            </Button>
+          )}
+          {step === "preview_ready" && (
+            <>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+                onClick={handleExecute}
+                data-testid="button-confirm-action"
+              >
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Execute
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setDismissed(true)}
+                data-testid="button-dismiss-action"
+              >
+                <XCircle className="w-3 h-3 mr-1" />
+                Cancel
+              </Button>
+            </>
+          )}
+          {step === "executing" && (
+            <Button size="sm" disabled className="h-7 text-xs bg-primary/10 text-primary border border-primary/20">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              Executing…
+            </Button>
+          )}
         </div>
       )}
-      {result && (
-        <div className={cn("flex items-center gap-1 mt-2 text-xs", result.success ? "text-green-400" : "text-destructive")}>
+
+      {step === "done" && result && (
+        <div className={cn("flex items-center gap-1 mt-3 text-xs", result.success ? "text-green-400" : "text-destructive")}>
           {result.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
           {result.summary}
         </div>

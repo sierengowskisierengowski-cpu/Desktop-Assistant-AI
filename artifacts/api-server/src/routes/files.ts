@@ -1,65 +1,23 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { allowedPathsTable, activityLogTable } from "@workspace/db";
+import { allowedPathsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import fs from "fs/promises";
-import path from "path";
-import os from "os";
 import {
   ScanFilesBody,
   PreviewFileOpBody,
   ExecuteFileOpBody,
   AddAllowedPathBody,
 } from "@workspace/api-zod";
+import {
+  isPathAllowed,
+  scanDirectory,
+  applyCriteria,
+  executeFileOperation,
+  TYPE_MAP,
+} from "../lib/file-executor";
 
 const router = Router();
-
-const TEMP_UNDO_DIR = path.join(os.tmpdir(), "axiom-undo");
-
-async function ensureUndoDir() {
-  await fs.mkdir(TEMP_UNDO_DIR, { recursive: true });
-}
-
-async function canonicalize(p: string): Promise<string> {
-  try {
-    return await fs.realpath(p);
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-async function isPathAllowed(targetPath: string): Promise<boolean> {
-  const allowed = await db.select().from(allowedPathsTable);
-  const canonical = await canonicalize(targetPath);
-  return allowed.some(a => {
-    const base = path.resolve(a.path);
-    return canonical === base || canonical.startsWith(base + path.sep);
-  });
-}
-
-async function scanDirectory(dirPath: string, recursive: boolean, maxDepth: number, currentDepth = 0): Promise<Array<{ name: string; path: string; size: number; modifiedAt: Date; type: "file" | "directory"; extension: string | null }>> {
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
-  const results = [];
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    try {
-      const stat = await fs.stat(fullPath);
-      results.push({
-        name: entry.name,
-        path: fullPath,
-        size: stat.size,
-        modifiedAt: stat.mtime,
-        type: entry.isDirectory() ? "directory" as const : "file" as const,
-        extension: entry.isFile() ? path.extname(entry.name).toLowerCase() || null : null,
-      });
-      if (recursive && entry.isDirectory() && currentDepth < maxDepth) {
-        const children = await scanDirectory(fullPath, recursive, maxDepth, currentDepth + 1);
-        results.push(...children);
-      }
-    } catch {}
-  }
-  return results;
-}
 
 // GET /files/allowed-paths
 router.get("/files/allowed-paths", async (_req, res) => {
@@ -99,7 +57,7 @@ router.post("/files/scan", async (req, res) => {
     const files = await scanDirectory(body.path, body.recursive ?? false, body.maxDepth ?? 2);
     const totalSize = files.filter(f => f.type === "file").reduce((sum, f) => sum + f.size, 0);
     res.json({ path: body.path, files, totalCount: files.length, totalSize });
-  } catch (err) {
+  } catch {
     res.status(400).json({ error: "Could not scan directory" });
   }
 });
@@ -114,23 +72,13 @@ router.post("/files/preview", async (req, res) => {
   const files = await scanDirectory(body.path, true, 3);
   let affected = files.filter(f => f.type === "file");
   let summary = "";
-  let reversible = true;
+  const reversible = true;
 
   if (body.operation === "delete") {
-    if (body.criteria) {
-      const daysOld = parseInt(body.criteria.match(/(\d+)\s*days?/i)?.[1] || "0");
-      const ext = body.criteria.match(/\.(\w+)/)?.[0];
-      const sizeKB = parseInt(body.criteria.match(/(\d+)\s*[kK][bB]/)?.[1] || "0");
-      if (daysOld > 0) {
-        const cutoff = new Date(Date.now() - daysOld * 86400000);
-        affected = affected.filter(f => f.modifiedAt < cutoff);
-      }
-      if (ext) affected = affected.filter(f => f.extension === ext);
-      if (sizeKB > 0) affected = affected.filter(f => f.size > sizeKB * 1024);
-    }
+    affected = applyCriteria(affected, body.criteria);
     summary = `Delete ${affected.length} files (${(affected.reduce((s, f) => s + f.size, 0) / 1e6).toFixed(1)} MB)`;
   } else if (body.operation === "organize") {
-    summary = `Organize ${affected.length} files by type into subfolders`;
+    summary = `Organize ${affected.length} files by type into subfolders (${Object.keys(TYPE_MAP).length > 0 ? Object.values(TYPE_MAP).filter((v, i, a) => a.indexOf(v) === i).join(", ") : "Images, Videos, Documents, etc."})`;
   } else if (body.operation === "dedup") {
     const sizeMap = new Map<number, typeof affected>();
     affected.forEach(f => {
@@ -138,8 +86,13 @@ router.post("/files/preview", async (req, res) => {
       arr.push(f);
       sizeMap.set(f.size, arr);
     });
-    affected = [...sizeMap.values()].filter(g => g.length > 1).flat().slice(1);
-    summary = `Remove ${affected.length} potential duplicate files`;
+    affected = [...sizeMap.values()].filter(g => g.length > 1).flatMap(g => g.slice(1));
+    summary = `Remove ${affected.length} potential duplicate files (same size)`;
+  } else if (body.operation === "rename") {
+    const criteria = body.criteria || "";
+    const previewCount = Math.min(affected.length, 5);
+    summary = `Rename ${affected.length} files — e.g. applying: ${criteria || "custom pattern"} (showing first ${previewCount})`;
+    affected = affected.slice(0, 100);
   } else if (body.operation === "move" && body.destination) {
     summary = `Move ${affected.length} files to ${body.destination}`;
   } else {
@@ -164,85 +117,18 @@ router.post("/files/execute", async (req, res) => {
   if (!body.confirmed) {
     return res.status(400).json({ error: "Operation not confirmed" });
   }
-
-  await ensureUndoDir();
-  const files = await scanDirectory(body.path, true, 3);
-  let affected = files.filter(f => f.type === "file");
-  const details: string[] = [];
-  const undoFiles: Array<{ tempPath: string; originalPath: string }> = [];
-  let processed = 0;
-
-  if (body.operation === "delete") {
-    if (body.criteria) {
-      const daysOld = parseInt(body.criteria.match(/(\d+)\s*days?/i)?.[1] || "0");
-      const ext = body.criteria.match(/\.(\w+)/)?.[0];
-      if (daysOld > 0) {
-        const cutoff = new Date(Date.now() - daysOld * 86400000);
-        affected = affected.filter(f => f.modifiedAt < cutoff);
-      }
-      if (ext) affected = affected.filter(f => f.extension === ext);
-    }
-    for (const f of affected) {
-      try {
-        const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${f.name}`);
-        await fs.rename(f.path, tempPath);
-        undoFiles.push({ tempPath, originalPath: f.path });
-        details.push(`Deleted: ${f.name}`);
-        processed++;
-      } catch {}
-    }
-  } else if (body.operation === "organize") {
-    const typeMap: Record<string, string> = {
-      ".jpg": "Images", ".jpeg": "Images", ".png": "Images", ".gif": "Images", ".webp": "Images", ".svg": "Images",
-      ".mp4": "Videos", ".mov": "Videos", ".avi": "Videos", ".mkv": "Videos",
-      ".mp3": "Audio", ".wav": "Audio", ".flac": "Audio", ".aac": "Audio",
-      ".pdf": "Documents", ".doc": "Documents", ".docx": "Documents", ".txt": "Documents", ".md": "Documents",
-      ".zip": "Archives", ".tar": "Archives", ".gz": "Archives", ".rar": "Archives",
-      ".js": "Code", ".ts": "Code", ".py": "Code", ".go": "Code", ".rs": "Code",
-    };
-    for (const f of affected) {
-      const folder = f.extension ? (typeMap[f.extension] || "Other") : "Other";
-      const destDir = path.join(body.path, folder);
-      await fs.mkdir(destDir, { recursive: true });
-      const destPath = path.join(destDir, f.name);
-      try {
-        await fs.rename(f.path, destPath);
-        details.push(`Moved ${f.name} → ${folder}/`);
-        processed++;
-      } catch {}
-    }
-  } else if (body.operation === "move" && body.destination) {
-    if (!await isPathAllowed(body.destination)) {
-      return res.status(403).json({ error: "Move destination is not in allowed paths" });
-    }
-    await fs.mkdir(body.destination, { recursive: true });
-    for (const f of affected) {
-      try {
-        await fs.rename(f.path, path.join(body.destination, f.name));
-        details.push(`Moved: ${f.name}`);
-        processed++;
-      } catch {}
-    }
+  if (body.operation === "move" && body.destination && !await isPathAllowed(body.destination)) {
+    return res.status(403).json({ error: "Move destination is not in allowed paths" });
   }
 
-  const undoKey = undoFiles.length > 0 ? JSON.stringify({ files: undoFiles }) : null;
-
-  await db.insert(activityLogTable).values({
-    type: "file_op",
-    description: `${body.operation} on ${body.path}`,
-    detail: details.slice(0, 5).join(", "),
-    filesAffected: JSON.stringify(affected.slice(0, processed).map(f => f.path)),
-    undoable: undoFiles.length > 0,
-    undoData: undoKey,
+  const result = await executeFileOperation({
+    operation: body.operation,
+    path: body.path,
+    criteria: body.criteria,
+    destination: body.destination,
   });
 
-  res.json({
-    success: true,
-    filesProcessed: processed,
-    summary: `Processed ${processed} files`,
-    details: details.slice(0, 20),
-    undoKey,
-  });
+  res.json(result);
 });
 
 export default router;

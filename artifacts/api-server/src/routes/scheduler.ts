@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { scheduledTasksTable, settingsTable, knowledgeNotesTable, activityLogTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, like } from "drizzle-orm";
 import cron, { type ScheduledTask } from "node-cron";
 import { CronExpressionParser } from "cron-parser";
 import OpenAI from "openai";
@@ -9,6 +9,7 @@ import {
   CreateScheduledTaskBody,
   UpdateScheduledTaskBody,
 } from "@workspace/api-zod";
+import { isPathAllowed, executeFileOperation } from "../lib/file-executor";
 
 const router = Router();
 
@@ -46,6 +47,15 @@ export function stopTask(id: number) {
   activeCrons.delete(id);
 }
 
+interface AiTaskAction {
+  action: "file_op" | "report" | "none";
+  operation?: "delete" | "organize" | "dedup" | "rename" | "move";
+  path?: string;
+  criteria?: string;
+  destination?: string;
+  summary: string;
+}
+
 async function runTask(id: number): Promise<{ success: boolean; output: string }> {
   const [task] = await db.select().from(scheduledTasksTable).where(eq(scheduledTasksTable.id, id));
   if (!task) return { success: false, output: "Task not found" };
@@ -56,43 +66,103 @@ async function runTask(id: number): Promise<{ success: boolean; output: string }
     ? "\n\n## User Knowledge Base\n" + notes.map(n => `### ${n.title}\n${n.content}`).join("\n\n")
     : "";
 
-  let output = `Executed: ${task.command}`;
+  let output = `Task recorded: ${task.command}`;
   let success = true;
+  let filesProcessed = 0;
 
   try {
     const client = settings?.aiMode === "local"
       ? new OpenAI({ baseURL: `${settings.ollamaBaseUrl}/v1`, apiKey: "ollama" })
-      : new OpenAI({ apiKey: settings?.cloudApiKey || process.env.OPENAI_API_KEY || "", baseURL: settings?.cloudBaseUrl || undefined });
+      : new OpenAI({
+          apiKey: settings?.cloudApiKey || process.env.OPENAI_API_KEY || "",
+          baseURL: settings?.cloudBaseUrl || undefined,
+        });
+
+    const systemPrompt = `You are AXIOM, a scheduled task runner. Analyze the task description and respond with a JSON object ONLY (no markdown, no explanation).
+
+Schema:
+{
+  "action": "file_op" | "report" | "none",
+  "operation": "delete" | "organize" | "dedup" | "rename" | "move",
+  "path": "/absolute/path/to/directory",
+  "criteria": "optional filter string (e.g. 'older than 14 days', '.tmp files')",
+  "destination": "/destination/path (only for move)",
+  "summary": "plain-English description of what was done or would be done"
+}
+
+Rules:
+- Use "file_op" action only if the task clearly involves file system operations AND a real path can be derived from the knowledge base.
+- Use "report" if the task is informational only.
+- Use "none" if the task cannot be interpreted.
+- The path MUST be an absolute path from the user's knowledge base. If no valid path is available, use "report" or "none".${knowledgeCtx}`;
 
     const completion = await client.chat.completions.create({
       model: settings?.aiModel || "gpt-4o-mini",
       messages: [
-        { role: "system", content: `You are AXIOM scheduled task runner. Execute this task description and provide a brief summary of what was done.${knowledgeCtx}` },
+        { role: "system", content: systemPrompt },
         { role: "user", content: task.command },
       ],
       max_tokens: 512,
+      response_format: { type: "json_object" },
     });
-    output = completion.choices[0]?.message?.content || output;
+
+    const raw = completion.choices[0]?.message?.content || "{}";
+    const parsed = JSON.parse(raw) as AiTaskAction;
+
+    if (
+      parsed.action === "file_op" &&
+      parsed.operation &&
+      parsed.path &&
+      await isPathAllowed(parsed.path)
+    ) {
+      const result = await executeFileOperation({
+        operation: parsed.operation,
+        path: parsed.path,
+        criteria: parsed.criteria,
+        destination: parsed.destination,
+        skipActivityLog: true,
+      });
+      filesProcessed = result.filesProcessed;
+      output = parsed.summary || result.summary;
+      success = result.success;
+
+      await db.insert(activityLogTable).values({
+        type: "scheduled",
+        description: `Scheduled[${task.id}]: ${task.name}`,
+        detail: `${output} — ${result.details.slice(0, 3).join(", ")}`,
+        filesAffected: JSON.stringify(result.details.slice(0, 10)),
+        undoable: result.undoKey !== null,
+        undoData: result.undoKey,
+      });
+    } else {
+      output = parsed.summary || `Task completed: ${task.command}`;
+      await db.insert(activityLogTable).values({
+        type: "scheduled",
+        description: `Scheduled[${task.id}]: ${task.name}`,
+        detail: output.slice(0, 500),
+        filesAffected: "[]",
+        undoable: false,
+      });
+    }
   } catch (err) {
-    output = `AI provider unavailable. Task recorded: ${task.command}`;
+    output = `AI provider unavailable — task recorded: ${task.command}`;
     success = false;
+    await db.insert(activityLogTable).values({
+      type: "scheduled",
+      description: `Scheduled[${id}]: ${task.name}`,
+      detail: output,
+      filesAffected: "[]",
+      undoable: false,
+    });
   }
 
-  const ranAt = new Date();
   await db.update(scheduledTasksTable).set({
-    lastRunAt: ranAt,
+    lastRunAt: new Date(),
     lastRunStatus: success ? "success" : "error",
     nextRunAt: calcNextRun(task.schedule),
   }).where(eq(scheduledTasksTable.id, id));
 
-  await db.insert(activityLogTable).values({
-    type: "scheduled",
-    description: `Scheduled: ${task.name}`,
-    detail: output.slice(0, 500),
-    filesAffected: "[]",
-    undoable: false,
-  });
-
+  void filesProcessed;
   return { success, output };
 }
 
@@ -122,6 +192,23 @@ router.get("/scheduler/tasks/:id", async (req, res) => {
   const [task] = await db.select().from(scheduledTasksTable).where(eq(scheduledTasksTable.id, parseInt(req.params.id)));
   if (!task) return res.status(404).json({ error: "Not found" });
   res.json(task);
+});
+
+// GET /scheduler/tasks/:id/logs
+router.get("/scheduler/tasks/:id/logs", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const logs = await db
+    .select()
+    .from(activityLogTable)
+    .where(
+      and(
+        eq(activityLogTable.type, "scheduled"),
+        like(activityLogTable.description, `Scheduled[${id}]:%`)
+      )
+    )
+    .orderBy(desc(activityLogTable.createdAt))
+    .limit(20);
+  res.json(logs);
 });
 
 // PATCH /scheduler/tasks/:id

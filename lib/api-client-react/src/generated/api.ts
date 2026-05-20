@@ -1102,6 +1102,36 @@ export const useToggleScheduledTask = <TError = ErrorType<unknown>,
       return useMutation(getToggleScheduledTaskMutationOptions(options));
     }
 
+export const getTaskRunLogsUrl = (id: number) => `/api/scheduler/tasks/${id}/logs`;
+
+export const getTaskRunLogs = async (id: number, options?: RequestInit): Promise<ActivityEntry[]> => {
+  return customFetch<ActivityEntry[]>(getTaskRunLogsUrl(id), { ...options, method: 'GET' });
+};
+
+export const getGetTaskRunLogsQueryKey = (id: number) => [`/api/scheduler/tasks/${id}/logs`] as const;
+
+export const getGetTaskRunLogsQueryOptions = <TData = Awaited<ReturnType<typeof getTaskRunLogs>>, TError = ErrorType<unknown>>(
+  id: number,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getTaskRunLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch> }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetTaskRunLogsQueryKey(id);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTaskRunLogs>>> = ({ signal }) => getTaskRunLogs(id, { signal, ...requestOptions });
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getTaskRunLogs>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type GetTaskRunLogsQueryResult = NonNullable<Awaited<ReturnType<typeof getTaskRunLogs>>>;
+export type GetTaskRunLogsQueryError = ErrorType<unknown>;
+
+export function useGetTaskRunLogs<TData = Awaited<ReturnType<typeof getTaskRunLogs>>, TError = ErrorType<unknown>>(
+  { id }: { id: number },
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getTaskRunLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTaskRunLogsQueryOptions(id, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export const getGetSchedulerStatusUrl = () => {
 
 
