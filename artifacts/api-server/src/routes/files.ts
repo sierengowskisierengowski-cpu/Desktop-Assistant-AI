@@ -20,9 +20,21 @@ async function ensureUndoDir() {
   await fs.mkdir(TEMP_UNDO_DIR, { recursive: true });
 }
 
+async function canonicalize(p: string): Promise<string> {
+  try {
+    return await fs.realpath(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
 async function isPathAllowed(targetPath: string): Promise<boolean> {
   const allowed = await db.select().from(allowedPathsTable);
-  return allowed.some(a => targetPath.startsWith(a.path));
+  const canonical = await canonicalize(targetPath);
+  return allowed.some(a => {
+    const base = path.resolve(a.path);
+    return canonical === base || canonical.startsWith(base + path.sep);
+  });
 }
 
 async function scanDirectory(dirPath: string, recursive: boolean, maxDepth: number, currentDepth = 0): Promise<Array<{ name: string; path: string; size: number; modifiedAt: Date; type: "file" | "directory"; extension: string | null }>> {
@@ -200,6 +212,9 @@ router.post("/files/execute", async (req, res) => {
       } catch {}
     }
   } else if (body.operation === "move" && body.destination) {
+    if (!await isPathAllowed(body.destination)) {
+      return res.status(403).json({ error: "Move destination is not in allowed paths" });
+    }
     await fs.mkdir(body.destination, { recursive: true });
     for (const f of affected) {
       try {

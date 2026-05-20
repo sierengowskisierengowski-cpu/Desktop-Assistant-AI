@@ -17,15 +17,52 @@ import {
   useDeleteChatSession,
   useSendChatMessage,
   getGetRecentChatsQueryKey,
+  useExecuteFileOp,
 } from "@workspace/api-client-react";
-import type { ChatMessage, AiAction } from "@workspace/api-client-react";
+import type { ChatMessage, AiAction, FileOpExecuteInputOperation } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
+interface FileOpPayload {
+  path?: string;
+  operation?: FileOpExecuteInputOperation;
+  criteria?: string;
+  destination?: string;
+}
+
 function ActionCard({ action }: { action: AiAction }) {
-  const [confirmed, setConfirmed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; summary: string } | null>(null);
+  const { toast } = useToast();
+  const executeFileOp = useExecuteFileOp();
+
+  const payload: FileOpPayload = (() => {
+    if (!action.payload) return {};
+    try { return JSON.parse(action.payload) as FileOpPayload; } catch { return {}; }
+  })();
+
+  const isFileOp = !!(payload.path && payload.operation);
 
   if (dismissed) return null;
+
+  const handleConfirm = () => {
+    if (!isFileOp || !payload.path || !payload.operation) {
+      setResult({ success: true, summary: "Action acknowledged" });
+      return;
+    }
+    executeFileOp.mutate(
+      { data: { path: payload.path, operation: payload.operation, criteria: payload.criteria, destination: payload.destination, confirmed: true } },
+      {
+        onSuccess: (r) => {
+          setResult({ success: true, summary: r.summary });
+          toast({ title: "Action completed", description: r.summary });
+        },
+        onError: () => {
+          setResult({ success: false, summary: "Operation failed — check allowed paths in Settings." });
+          toast({ title: "Action failed", variant: "destructive" });
+        },
+      }
+    );
+  };
 
   return (
     <motion.div
@@ -38,17 +75,23 @@ function ActionCard({ action }: { action: AiAction }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-primary mb-1">Action Required</p>
           <p className="text-xs text-muted-foreground">{action.description}</p>
+          {isFileOp && payload.path && (
+            <p className="text-[10px] text-muted-foreground/60 mt-0.5 font-mono">{payload.path}</p>
+          )}
         </div>
       </div>
-      {!confirmed && (
+      {!result && (
         <div className="flex gap-2 mt-3">
           <Button
             size="sm"
             className="h-7 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
-            onClick={() => setConfirmed(true)}
+            onClick={handleConfirm}
+            disabled={executeFileOp.isPending}
             data-testid="button-confirm-action"
           >
-            <CheckCircle2 className="w-3 h-3 mr-1" />
+            {executeFileOp.isPending
+              ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              : <CheckCircle2 className="w-3 h-3 mr-1" />}
             Confirm
           </Button>
           <Button
@@ -56,6 +99,7 @@ function ActionCard({ action }: { action: AiAction }) {
             variant="ghost"
             className="h-7 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => setDismissed(true)}
+            disabled={executeFileOp.isPending}
             data-testid="button-dismiss-action"
           >
             <XCircle className="w-3 h-3 mr-1" />
@@ -63,10 +107,10 @@ function ActionCard({ action }: { action: AiAction }) {
           </Button>
         </div>
       )}
-      {confirmed && (
-        <div className="flex items-center gap-1 mt-2 text-xs text-green-400">
-          <CheckCircle2 className="w-3 h-3" />
-          Confirmed — action queued
+      {result && (
+        <div className={cn("flex items-center gap-1 mt-2 text-xs", result.success ? "text-green-400" : "text-destructive")}>
+          {result.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+          {result.summary}
         </div>
       )}
     </motion.div>

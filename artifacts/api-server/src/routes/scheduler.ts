@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { scheduledTasksTable, settingsTable, knowledgeNotesTable, chatMessagesTable, activityLogTable } from "@workspace/db";
+import { scheduledTasksTable, settingsTable, knowledgeNotesTable, activityLogTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
+import { CronExpressionParser } from "cron-parser";
 import OpenAI from "openai";
 import {
   CreateScheduledTaskBody,
@@ -11,15 +12,12 @@ import {
 
 const router = Router();
 
-const activeCrons = new Map<number, cron.ScheduledTask>();
+const activeCrons = new Map<number, ScheduledTask>();
 
 function calcNextRun(schedule: string): Date | null {
   try {
-    const interval = cron.schedule(schedule, () => {});
-    interval.stop();
-    const now = new Date();
-    now.setSeconds(now.getSeconds() + 1);
-    return now;
+    const expr = CronExpressionParser.parse(schedule);
+    return expr.next().toDate();
   } catch {
     return null;
   }
