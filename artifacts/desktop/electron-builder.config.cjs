@@ -31,11 +31,6 @@ const config = {
       to: "api-server/drizzle",
       filter: ["**/*"],
     },
-    {
-      from: "../../node_modules/.pnpm/better-sqlite3@12.10.0/node_modules/better-sqlite3",
-      to: "api-server/node_modules/better-sqlite3",
-      filter: ["**/*"],
-    },
   ],
 
   mac: {
@@ -44,7 +39,7 @@ const config = {
       { target: "dmg", arch: ["x64", "arm64"] },
       { target: "zip", arch: ["x64", "arm64"] },
     ],
-    icon: "icons/icon.icns",
+    icon: "icons/icon.png",
     hardenedRuntime: true,
     gatekeeperAssess: false,
     extendInfo: {
@@ -56,7 +51,7 @@ const config = {
 
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
-    icon: "icons/icon.ico",
+    icon: "icons/icon.png",
   },
 
   linux: {
