@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { electron } from "@/lib/electron-api";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -356,16 +357,24 @@ export default function Chat() {
     doSend(activeSessionId);
   }, [input, isStreaming, activeSessionId, createSession, queryClient]);
 
-  const doSend = useCallback((sessionId: number) => {
+  const doSend = useCallback(async (sessionId: number) => {
     const content = input.trim();
     setInput("");
     setIsStreaming(true);
     setStreamingContent("");
 
     const apiBase = window.location.protocol === "file:" ? "http://127.0.0.1:8080" : "";
+    const sseHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    // In packaged Electron (file://) attach the per-session auth token to the
+    // manual fetch — the generated client does this automatically, but SSE
+    // streaming bypasses it.
+    if (window.location.protocol === "file:") {
+      const tok = await electron.getLocalToken();
+      if (tok) sseHeaders["Authorization"] = `Bearer ${tok}`;
+    }
     fetch(`${apiBase}/api/chat/sessions/${sessionId}/messages/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: sseHeaders,
       body: JSON.stringify({ content }),
     }).then(async (response) => {
       if (!response.ok || !response.body) {

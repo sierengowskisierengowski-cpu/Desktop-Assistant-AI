@@ -57,8 +57,11 @@ const LOCAL_TOKEN = process.env.AXIOM_LOCAL_TOKEN ?? null;
 
 function localAuth(req: Request, res: Response, next: NextFunction): void {
   if (!LOCAL_TOKEN) return next(); // dev mode — no token required
-  const provided = req.headers["x-axiom-token"];
-  if (provided === LOCAL_TOKEN) return next();
+  // Accept either the explicit x-axiom-token header or the standard
+  // Authorization: Bearer header (sent by the generated API client).
+  const explicit = req.headers["x-axiom-token"];
+  const bearer = req.headers["authorization"]?.replace(/^Bearer\s+/i, "");
+  if (explicit === LOCAL_TOKEN || bearer === LOCAL_TOKEN) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 
