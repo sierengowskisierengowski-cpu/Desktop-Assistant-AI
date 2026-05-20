@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -49,6 +49,19 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// ─── Local session auth ───────────────────────────────────────────────────────
+// When AXIOM_LOCAL_TOKEN is set (packaged Electron), every API request must
+// carry a matching `x-axiom-token` header. In dev mode the env var is absent
+// so the check is skipped, keeping the dev workflow frictionless.
+const LOCAL_TOKEN = process.env.AXIOM_LOCAL_TOKEN ?? null;
+
+function localAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!LOCAL_TOKEN) return next(); // dev mode — no token required
+  const provided = req.headers["x-axiom-token"];
+  if (provided === LOCAL_TOKEN) return next();
+  res.status(401).json({ error: "Unauthorized" });
+}
+
+app.use("/api", localAuth, router);
 
 export default app;

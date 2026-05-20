@@ -21,6 +21,12 @@ import log from "electron-log";
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const DEV_RENDERER_URL = "http://localhost:21098";
 const CONFIG_PATH = path.join(app.getPath("userData"), "axiom-config.json");
+
+// Random token generated once per Electron session. Passed to the spawned API
+// server and sent with every renderer request so the API refuses calls from
+// any other process on the machine.
+import { randomUUID } from "node:crypto";
+const LOCAL_SESSION_TOKEN = randomUUID();
 const ICON_PATH = path.join(__dirname, "..", "icons", "tray-icon.png");
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -103,6 +109,8 @@ function startApiServer(): void {
       PORT: "8080",
       AXIOM_DB_PATH: axiomDbPath,
       NODE_PATH: nodeModulesPath,
+      AXIOM_LOCAL_TOKEN: LOCAL_SESSION_TOKEN,
+      AXIOM_API_HOST: "127.0.0.1",
     },
     detached: false,
     stdio: ["ignore", "pipe", "pipe"],
@@ -333,6 +341,8 @@ function setupIpc(win: BrowserWindow): void {
   ipcMain.handle("app:get-config", () => loadConfig());
 
   ipcMain.handle("app:get-version", () => app.getVersion());
+
+  ipcMain.handle("app:get-local-token", () => LOCAL_SESSION_TOKEN);
 
   ipcMain.handle("app:open-external", (_e, url: string) => {
     shell.openExternal(url);

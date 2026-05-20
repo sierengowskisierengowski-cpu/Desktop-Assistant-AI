@@ -17,13 +17,19 @@ try {
   process.exit(1);
 }
 
-app.listen(port, async (err) => {
+// AXIOM_API_HOST controls the bind address.
+// Production (Electron): set to "127.0.0.1" by startApiServer() so the API is
+// never reachable from the LAN. Dev (Replit): left as "0.0.0.0" so the
+// workflow health-check port scanner can detect the port.
+const apiHost = process.env.AXIOM_API_HOST ?? "0.0.0.0";
+
+app.listen(port, apiHost, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  logger.info({ port, host: apiHost }, `Server listening on ${apiHost}`);
 
   try {
     await initScheduler();

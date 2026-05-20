@@ -20,6 +20,7 @@ interface IElectronAPI {
   isAutoLaunchEnabled: () => Promise<boolean>;
   getConfig: () => Promise<Record<string, unknown>>;
   getVersion: () => Promise<string>;
+  getLocalToken: () => Promise<string>;
   openExternal: (url: string) => Promise<void>;
   showItemInFolder: (filePath: string) => Promise<void>;
   openDirectoryDialog: () => Promise<string | null>;
@@ -66,6 +67,7 @@ export const electron = {
   isAutoLaunchEnabled: electronAPI?.isAutoLaunchEnabled ?? noopBool,
   getConfig: electronAPI?.getConfig ?? noopObj,
   getVersion: electronAPI?.getVersion ?? noopStr,
+  getLocalToken: electronAPI?.getLocalToken ?? noopStr,
   openExternal: electronAPI?.openExternal ?? noop,
   showItemInFolder: electronAPI?.showItemInFolder ?? noop,
   openDirectoryDialog: electronAPI?.openDirectoryDialog ?? noopNull,

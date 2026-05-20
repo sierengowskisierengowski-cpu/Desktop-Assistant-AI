@@ -30,6 +30,7 @@ const electronAPI = {
   // ── App info ──────────────────────────────────────────────────────────────
   getConfig: () => ipcRenderer.invoke("app:get-config"),
   getVersion: (): Promise<string> => ipcRenderer.invoke("app:get-version"),
+  getLocalToken: (): Promise<string> => ipcRenderer.invoke("app:get-local-token"),
   openExternal: (url: string) => ipcRenderer.invoke("app:open-external", url),
   showItemInFolder: (filePath: string) =>
     ipcRenderer.invoke("app:show-item-in-folder", filePath),
