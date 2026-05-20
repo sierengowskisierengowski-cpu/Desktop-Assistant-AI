@@ -34,7 +34,13 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- **Everything is real, no exceptions.** No mock data, no placeholder buttons, no dead ends, no disabled UI. Every feature shipped must be fully wired and working.
+- **Professional README on every project.** Include what the app does, download/install instructions, features, build-from-source steps, and tech stack.
+- **Author credit: Joseph Sierengowski** — in the README, package.json, license, and any installer/build config.
+- **Real native packaging.** Desktop apps get proper installers (macOS .dmg, Windows .exe, Linux .AppImage) via electron-builder. GitHub Actions workflow included for automated builds on tag push.
+- **MIT License** on every project, credited to Joseph Sierengowski.
+- **One-liner install scripts** for CLI/desktop tools where applicable.
+- **Settings pages must be functional** — every option saves and takes effect, About section shows real version/platform info.
 
 ## Gotchas
 
