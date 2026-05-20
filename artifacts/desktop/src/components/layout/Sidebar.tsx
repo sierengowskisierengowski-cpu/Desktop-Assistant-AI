@@ -8,7 +8,7 @@ export function Sidebar() {
   const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
 
   if (settings && !settings.onboardingCompleted && location !== "/onboarding") {
-    return null; // Don't show sidebar during onboarding
+    return null;
   }
 
   if (location === "/onboarding") return null;
@@ -25,33 +25,37 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="w-16 flex-shrink-0 border-r border-white/10 glass-panel flex flex-col items-center py-4 space-y-4 h-full relative z-10">
-      <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 mb-4 shadow-[0_0_15px_rgba(var(--primary),0.3)]">
-        <Zap className="w-5 h-5 text-primary" />
+    <div className="w-16 flex-shrink-0 border-r border-white/[0.07] bg-background flex flex-col items-center py-4 space-y-1 h-full relative z-10">
+      {/* Logo mark */}
+      <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex items-center justify-center border border-white/20 mb-5 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]">
+        <Zap className="w-4 h-4 text-foreground/80" />
       </div>
-      
+
       {links.map((link) => {
         const isActive = location === link.href || (location === "/" && link.href === "/chat");
         const Icon = link.icon;
-        
+
         return (
           <Link
             key={link.href}
             href={link.href}
             className={cn(
-              "w-10 h-10 flex items-center justify-center rounded-lg transition-all duration-200 relative group",
-              isActive 
-                ? "bg-primary/20 text-primary shadow-[inset_0_0_10px_rgba(var(--primary),0.2)]" 
-                : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+              "w-10 h-10 flex items-center justify-center rounded-lg transition-all duration-200 relative group border",
+              isActive
+                ? "bg-white/[0.08] border-white/30 text-foreground shadow-[0_0_0_1px_rgba(255,255,255,0.06),inset_0_1px_0_rgba(255,255,255,0.08)]"
+                : "border-transparent text-muted-foreground hover:bg-white/[0.05] hover:border-white/15 hover:text-foreground/80"
             )}
             title={link.label}
           >
-            <Icon className="w-5 h-5" />
+            <Icon className="w-4 h-4" />
+
+            {/* Active left-edge indicator */}
             {isActive && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r-full" />
+              <div className="absolute -left-px top-1/2 -translate-y-1/2 w-[3px] h-5 bg-foreground/60 rounded-r-full" />
             )}
-            
-            <div className="absolute left-14 bg-popover text-popover-foreground text-xs px-2 py-1 rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap border border-white/10 glass-card">
+
+            {/* Tooltip */}
+            <div className="absolute left-[52px] bg-popover text-popover-foreground text-xs px-2.5 py-1.5 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap border border-white/[0.08] shadow-xl z-50">
               {link.label}
             </div>
           </Link>

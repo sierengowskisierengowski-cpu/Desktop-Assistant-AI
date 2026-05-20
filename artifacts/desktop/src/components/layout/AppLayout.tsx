@@ -38,10 +38,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [settings?.theme]);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background bg-[url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center">
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-3xl z-0" />
+    <div className="flex h-screen w-full overflow-hidden bg-background">
+      {/* Subtle noise/grain texture overlay */}
+      <div className="absolute inset-0 opacity-[0.025] pointer-events-none z-0"
+        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")", backgroundRepeat: "repeat", backgroundSize: "128px 128px" }} />
       <Sidebar />
-      <main className="flex-1 overflow-auto relative z-10 h-full p-4 flex flex-col">
+      <main className="flex-1 overflow-auto relative z-10 h-full p-3 flex flex-col">
         <WindowTitleBar />
         <div className="flex-1 glass-panel rounded-2xl overflow-hidden shadow-2xl relative flex flex-col min-h-0">
           {children}
