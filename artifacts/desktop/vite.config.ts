@@ -51,6 +51,22 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // Proxy all /api requests to the API server so relative paths work in
+    // both web-preview dev mode and electron:dev mode.
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+        // SSE streams must not be buffered
+        configure: (proxy) => {
+          proxy.on("proxyReq", (_proxyReq, req) => {
+            if (req.headers.accept?.includes("text/event-stream")) {
+              _proxyReq.setHeader("Accept", "text/event-stream");
+            }
+          });
+        },
+      },
+    },
   },
   preview: {
     port,
