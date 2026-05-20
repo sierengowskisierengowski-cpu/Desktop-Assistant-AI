@@ -3,20 +3,38 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Desktop AI Assistant API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: chat
+    description: Chat sessions and messages
+  - name: scheduler
+    description: Scheduled task management
+  - name: knowledge
+    description: Knowledge base notes
+  - name: activity
+    description: Activity log
+  - name: quickactions
+    description: Quick action buttons
+  - name: settings
+    description: App configuration
+  - name: ai
+    description: AI provider operations
+  - name: files
+    description: File system operations
+  - name: stats
+    description: System statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +42,720 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Chat ──────────────────────────────────────────────────────────────────
+  /chat/sessions:
+    get:
+      operationId: listChatSessions
+      tags: [chat]
+      summary: List chat sessions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatSession"
+    post:
+      operationId: createChatSession
+      tags: [chat]
+      summary: Create a new chat session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatSessionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSession"
+
+  /chat/sessions/{id}:
+    get:
+      operationId: getChatSession
+      tags: [chat]
+      summary: Get a chat session with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSessionWithMessages"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteChatSession
+      tags: [chat]
+      summary: Delete a chat session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /chat/sessions/{id}/messages:
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a message and get AI response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "200":
+          description: AI response with optional action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /chat/recent:
+    get:
+      operationId: getRecentChats
+      tags: [chat]
+      summary: Get recent chat sessions with last message preview
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatSessionPreview"
+
+  # ── Scheduler ────────────────────────────────────────────────────────────
+  /scheduler/tasks:
+    get:
+      operationId: listScheduledTasks
+      tags: [scheduler]
+      summary: List all scheduled tasks
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduledTask"
+    post:
+      operationId: createScheduledTask
+      tags: [scheduler]
+      summary: Create a scheduled task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledTaskInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledTask"
+
+  /scheduler/tasks/{id}:
+    get:
+      operationId: getScheduledTask
+      tags: [scheduler]
+      summary: Get a scheduled task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledTask"
+    patch:
+      operationId: updateScheduledTask
+      tags: [scheduler]
+      summary: Update a scheduled task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduledTaskUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledTask"
+    delete:
+      operationId: deleteScheduledTask
+      tags: [scheduler]
+      summary: Delete a scheduled task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /scheduler/tasks/{id}/run:
+    post:
+      operationId: runScheduledTask
+      tags: [scheduler]
+      summary: Run a task immediately
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunResult"
+
+  /scheduler/tasks/{id}/toggle:
+    post:
+      operationId: toggleScheduledTask
+      tags: [scheduler]
+      summary: Enable or disable a scheduled task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledTask"
+
+  /scheduler/status:
+    get:
+      operationId: getSchedulerStatus
+      tags: [scheduler]
+      summary: Get upcoming tasks with countdowns
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatus"
+
+  # ── Knowledge Base ────────────────────────────────────────────────────────
+  /knowledge/notes:
+    get:
+      operationId: listKnowledgeNotes
+      tags: [knowledge]
+      summary: List all knowledge notes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeNote"
+    post:
+      operationId: createKnowledgeNote
+      tags: [knowledge]
+      summary: Create a knowledge note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeNoteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeNote"
+
+  /knowledge/notes/{id}:
+    patch:
+      operationId: updateKnowledgeNote
+      tags: [knowledge]
+      summary: Update a knowledge note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeNoteUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeNote"
+    delete:
+      operationId: deleteKnowledgeNote
+      tags: [knowledge]
+      summary: Delete a knowledge note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /knowledge/export:
+    get:
+      operationId: exportKnowledge
+      tags: [knowledge]
+      summary: Export all knowledge notes as JSON
+      responses:
+        "200":
+          description: JSON export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeExport"
+
+  /knowledge/import:
+    post:
+      operationId: importKnowledge
+      tags: [knowledge]
+      summary: Import knowledge notes from JSON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeExport"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  # ── Activity Log ──────────────────────────────────────────────────────────
+  /activity:
+    get:
+      operationId: listActivityLog
+      tags: [activity]
+      summary: List activity log entries
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [chat, file_op, scheduled, all]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+
+  /activity/{id}/undo:
+    post:
+      operationId: undoActivity
+      tags: [activity]
+      summary: Undo a file operation from the activity log
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Undo result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UndoResult"
+
+  /activity/summary:
+    get:
+      operationId: getActivitySummary
+      tags: [activity]
+      summary: Get activity summary counts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivitySummary"
+
+  # ── Quick Actions ─────────────────────────────────────────────────────────
+  /quickactions:
+    get:
+      operationId: listQuickActions
+      tags: [quickactions]
+      summary: List all quick actions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuickAction"
+    post:
+      operationId: createQuickAction
+      tags: [quickactions]
+      summary: Create a quick action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickActionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuickAction"
+
+  /quickactions/{id}:
+    patch:
+      operationId: updateQuickAction
+      tags: [quickactions]
+      summary: Update a quick action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickActionUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuickAction"
+    delete:
+      operationId: deleteQuickAction
+      tags: [quickactions]
+      summary: Delete a quick action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /quickactions/reorder:
+    post:
+      operationId: reorderQuickActions
+      tags: [quickactions]
+      summary: Reorder quick actions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickActionReorder"
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuickAction"
+
+  # ── Settings ──────────────────────────────────────────────────────────────
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get current settings
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppSettingsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+
+  # ── AI Provider ───────────────────────────────────────────────────────────
+  /ai/status:
+    get:
+      operationId: getAiStatus
+      tags: [ai]
+      summary: Get AI provider status (Ollama connectivity, available models)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiStatus"
+
+  /ai/models:
+    get:
+      operationId: listAiModels
+      tags: [ai]
+      summary: List available models (local + cloud)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiModel"
+
+  /ai/models/pull:
+    post:
+      operationId: pullAiModel
+      tags: [ai]
+      summary: Pull a model via Ollama
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelPullInput"
+      responses:
+        "200":
+          description: Pull initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelPullStatus"
+
+  /ai/models/{name}:
+    delete:
+      operationId: deleteAiModel
+      tags: [ai]
+      summary: Delete a local Ollama model
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ── File Operations ───────────────────────────────────────────────────────
+  /files/scan:
+    post:
+      operationId: scanFiles
+      tags: [files]
+      summary: Scan a directory and return file listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileScanInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileScanResult"
+
+  /files/preview:
+    post:
+      operationId: previewFileOp
+      tags: [files]
+      summary: Preview which files will be affected by an operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileOpPreviewInput"
+      responses:
+        "200":
+          description: Preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileOpPreview"
+
+  /files/execute:
+    post:
+      operationId: executeFileOp
+      tags: [files]
+      summary: Execute a confirmed file operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileOpExecuteInput"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileOpResult"
+
+  /files/allowed-paths:
+    get:
+      operationId: getAllowedPaths
+      tags: [files]
+      summary: Get user-approved file paths
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AllowedPath"
+    post:
+      operationId: addAllowedPath
+      tags: [files]
+      summary: Add an allowed path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AllowedPathInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllowedPath"
+
+  /files/allowed-paths/{id}:
+    delete:
+      operationId: removeAllowedPath
+      tags: [files]
+      summary: Remove an allowed path
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  # ── System Stats ──────────────────────────────────────────────────────────
+  /stats/system:
+    get:
+      operationId: getSystemStats
+      tags: [stats]
+      summary: Get live system stats (CPU, RAM, disk)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStats"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +763,686 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    # ── Chat ────────────────────────────────────────────────────────────────
+    ChatSession:
+      type: object
+      required: [id, title, createdAt, updatedAt, messageCount]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+
+    ChatSessionInput:
+      type: object
+      properties:
+        title:
+          type: string
+
+    ChatSessionWithMessages:
+      type: object
+      required: [id, title, createdAt, updatedAt, messages]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+
+    ChatMessage:
+      type: object
+      required: [id, sessionId, role, content, createdAt]
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        actionType:
+          type: ["string", "null"]
+        actionData:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/ChatMessage"
+        action:
+          $ref: "#/components/schemas/AiAction"
+
+    AiAction:
+      type: object
+      required: [type, description]
+      properties:
+        type:
+          type: string
+          enum: [file_op, shell, info, none]
+        description:
+          type: string
+        payload:
+          type: ["string", "null"]
+        requiresConfirmation:
+          type: boolean
+
+    ChatSessionPreview:
+      type: object
+      required: [id, title, lastMessage, updatedAt, messageCount]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        lastMessage:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+
+    # ── Scheduler ───────────────────────────────────────────────────────────
+    ScheduledTask:
+      type: object
+      required: [id, name, command, schedule, enabled, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        command:
+          type: string
+        schedule:
+          type: string
+        scheduleLabel:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+        lastRunAt:
+          type: ["string", "null"]
+        lastRunStatus:
+          type: ["string", "null"]
+        nextRunAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    ScheduledTaskInput:
+      type: object
+      required: [name, command, schedule]
+      properties:
+        name:
+          type: string
+        command:
+          type: string
+        schedule:
+          type: string
+        scheduleLabel:
+          type: string
+        enabled:
+          type: boolean
+
+    ScheduledTaskUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        command:
+          type: string
+        schedule:
+          type: string
+        scheduleLabel:
+          type: string
+        enabled:
+          type: boolean
+
+    TaskRunResult:
+      type: object
+      required: [success, output, ranAt]
+      properties:
+        success:
+          type: boolean
+        output:
+          type: string
+        ranAt:
+          type: string
+          format: date-time
+
+    SchedulerStatus:
+      type: object
+      required: [tasks, totalEnabled, totalDisabled]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerTaskStatus"
+        totalEnabled:
+          type: integer
+        totalDisabled:
+          type: integer
+
+    SchedulerTaskStatus:
+      type: object
+      required: [id, name, enabled, nextRunAt, secondsUntilRun]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        enabled:
+          type: boolean
+        nextRunAt:
+          type: ["string", "null"]
+        secondsUntilRun:
+          type: ["integer", "null"]
+
+    # ── Knowledge ───────────────────────────────────────────────────────────
+    KnowledgeNote:
+      type: object
+      required: [id, title, content, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        pinned:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KnowledgeNoteInput:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        pinned:
+          type: boolean
+
+    KnowledgeNoteUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        pinned:
+          type: boolean
+
+    KnowledgeExport:
+      type: object
+      required: [notes, exportedAt]
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeNote"
+        exportedAt:
+          type: string
+          format: date-time
+
+    ImportResult:
+      type: object
+      required: [imported, skipped]
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+
+    # ── Activity ─────────────────────────────────────────────────────────────
+    ActivityEntry:
+      type: object
+      required: [id, type, description, createdAt, undoable]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [chat, file_op, scheduled]
+        description:
+          type: string
+        detail:
+          type: ["string", "null"]
+        filesAffected:
+          type: array
+          items:
+            type: string
+        undoable:
+          type: boolean
+        undone:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    UndoResult:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        filesRestored:
+          type: array
+          items:
+            type: string
+
+    ActivitySummary:
+      type: object
+      required: [total, byType, recentCount]
+      properties:
+        total:
+          type: integer
+        byType:
+          type: object
+          properties:
+            chat:
+              type: integer
+            file_op:
+              type: integer
+            scheduled:
+              type: integer
+        recentCount:
+          type: integer
+
+    # ── Quick Actions ────────────────────────────────────────────────────────
+    QuickAction:
+      type: object
+      required: [id, label, command, order, createdAt]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        command:
+          type: string
+        icon:
+          type: ["string", "null"]
+        color:
+          type: ["string", "null"]
+        order:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    QuickActionInput:
+      type: object
+      required: [label, command]
+      properties:
+        label:
+          type: string
+        command:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+
+    QuickActionUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        command:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+
+    QuickActionReorder:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+
+    # ── Settings ─────────────────────────────────────────────────────────────
+    AppSettings:
+      type: object
+      required: [id, hotkey, aiMode, aiModel, theme, onboardingCompleted]
+      properties:
+        id:
+          type: integer
+        hotkey:
+          type: string
+        aiMode:
+          type: string
+          enum: [local, cloud]
+        aiModel:
+          type: string
+        cloudApiKey:
+          type: ["string", "null"]
+        cloudBaseUrl:
+          type: ["string", "null"]
+        ollamaBaseUrl:
+          type: string
+        theme:
+          type: string
+          enum: [light, dark, system]
+        launchAtLogin:
+          type: boolean
+        startMinimized:
+          type: boolean
+        dismissOnBlur:
+          type: boolean
+        notifyOnSchedule:
+          type: boolean
+        notifyOnError:
+          type: boolean
+        windowWidth:
+          type: integer
+        windowHeight:
+          type: integer
+        onboardingCompleted:
+          type: boolean
+
+    AppSettingsUpdate:
+      type: object
+      properties:
+        hotkey:
+          type: string
+        aiMode:
+          type: string
+          enum: [local, cloud]
+        aiModel:
+          type: string
+        cloudApiKey:
+          type: string
+        cloudBaseUrl:
+          type: string
+        ollamaBaseUrl:
+          type: string
+        theme:
+          type: string
+          enum: [light, dark, system]
+        launchAtLogin:
+          type: boolean
+        startMinimized:
+          type: boolean
+        dismissOnBlur:
+          type: boolean
+        notifyOnSchedule:
+          type: boolean
+        notifyOnError:
+          type: boolean
+        windowWidth:
+          type: integer
+        windowHeight:
+          type: integer
+        onboardingCompleted:
+          type: boolean
+
+    # ── AI Provider ──────────────────────────────────────────────────────────
+    AiStatus:
+      type: object
+      required: [mode, ollamaAvailable, activeModel]
+      properties:
+        mode:
+          type: string
+          enum: [local, cloud]
+        ollamaAvailable:
+          type: boolean
+        ollamaVersion:
+          type: ["string", "null"]
+        activeModel:
+          type: string
+        cloudConfigured:
+          type: boolean
+
+    AiModel:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [local, cloud]
+        size:
+          type: ["string", "null"]
+        contextLength:
+          type: ["integer", "null"]
+        description:
+          type: ["string", "null"]
+
+    ModelPullInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    ModelPullStatus:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        progress:
+          type: ["number", "null"]
+
+    # ── Files ────────────────────────────────────────────────────────────────
+    FileScanInput:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+        recursive:
+          type: boolean
+        maxDepth:
+          type: integer
+
+    FileScanResult:
+      type: object
+      required: [path, files, totalCount, totalSize]
+      properties:
+        path:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileEntry"
+        totalCount:
+          type: integer
+        totalSize:
+          type: integer
+
+    FileEntry:
+      type: object
+      required: [name, path, size, modifiedAt, type]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        size:
+          type: integer
+        modifiedAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [file, directory]
+        extension:
+          type: ["string", "null"]
+
+    FileOpPreviewInput:
+      type: object
+      required: [operation, path]
+      properties:
+        operation:
+          type: string
+          enum: [delete, move, organize, rename, dedup]
+        path:
+          type: string
+        criteria:
+          type: ["string", "null"]
+        destination:
+          type: ["string", "null"]
+
+    FileOpPreview:
+      type: object
+      required: [operation, affectedFiles, summary]
+      properties:
+        operation:
+          type: string
+        affectedFiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileEntry"
+        summary:
+          type: string
+        totalSize:
+          type: integer
+        reversible:
+          type: boolean
+
+    FileOpExecuteInput:
+      type: object
+      required: [operation, path]
+      properties:
+        operation:
+          type: string
+          enum: [delete, move, organize, rename, dedup]
+        path:
+          type: string
+        criteria:
+          type: ["string", "null"]
+        destination:
+          type: ["string", "null"]
+        confirmed:
+          type: boolean
+
+    FileOpResult:
+      type: object
+      required: [success, filesProcessed, summary]
+      properties:
+        success:
+          type: boolean
+        filesProcessed:
+          type: integer
+        summary:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+        undoKey:
+          type: ["string", "null"]
+
+    AllowedPath:
+      type: object
+      required: [id, path, label, createdAt]
+      properties:
+        id:
+          type: integer
+        path:
+          type: string
+        label:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    AllowedPathInput:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+        label:
+          type: string
+
+    # ── System Stats ─────────────────────────────────────────────────────────
+    SystemStats:
+      type: object
+      required: [cpu, memory, disk, uptime]
+      properties:
+        cpu:
+          type: number
+          description: CPU usage percentage
+        memory:
+          type: object
+          required: [total, used, free, percent]
+          properties:
+            total:
+              type: integer
+            used:
+              type: integer
+            free:
+              type: integer
+            percent:
+              type: number
+        disk:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiskInfo"
+        uptime:
+          type: integer
+
+    DiskInfo:
+      type: object
+      required: [mount, total, used, free, percent]
+      properties:
+        mount:
+          type: string
+        total:
+          type: integer
+        used:
+          type: integer
+        free:
+          type: integer
+        percent:
+          type: number
