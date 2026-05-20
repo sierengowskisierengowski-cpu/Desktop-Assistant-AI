@@ -119,6 +119,9 @@ export default function Settings() {
           if (patch.dismissOnBlur !== undefined) {
             await electron.setDismissOnBlur(patch.dismissOnBlur);
           }
+          if (patch.startMinimized !== undefined) {
+            await electron.setStartMinimized(patch.startMinimized);
+          }
         }
       },
       onError: () => toast({ title: "Settings update failed", variant: "destructive" }),

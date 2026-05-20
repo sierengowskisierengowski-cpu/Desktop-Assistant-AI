@@ -85,6 +85,10 @@ export default function Onboarding() {
       queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getListKnowledgeNotesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetAllowedPathsQueryKey() });
+      // Apply hotkey at OS level in Electron
+      if (isElectron) {
+        await electron.updateHotkey(hotkey);
+      }
       setLocation("/chat");
     } catch {
       toast({ title: "Setup error", description: "Some settings could not be saved. You can configure them in Settings.", variant: "destructive" });

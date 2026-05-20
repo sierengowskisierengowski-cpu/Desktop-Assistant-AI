@@ -221,9 +221,7 @@ function createTray(win: BrowserWindow): Tray {
     ]);
 
   t.on("double-click", () => toggleWindow(win));
-  t.on("click", () => {
-    if (process.platform === "win32") toggleWindow(win);
-  });
+  t.on("click", () => toggleWindow(win));
   t.on("right-click", () => t.popUpContextMenu(buildMenu()));
 
   // Update menu on visibility change so label stays current
@@ -285,6 +283,12 @@ function setupIpc(win: BrowserWindow): void {
   ipcMain.handle("window:set-dismiss-on-blur", (_e, enabled: boolean) => {
     config.dismissOnBlur = enabled;
     saveConfig({ dismissOnBlur: enabled });
+  });
+
+  ipcMain.handle("window:set-start-minimized", (_e, enabled: boolean) => {
+    config.startMinimized = enabled;
+    saveConfig({ startMinimized: enabled });
+    return { success: true };
   });
 
   ipcMain.handle("hotkey:update", (_e, accelerator: string) => {

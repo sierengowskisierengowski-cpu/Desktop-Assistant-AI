@@ -14,6 +14,8 @@ const electronAPI = {
   setPinned: (pinned: boolean) => ipcRenderer.invoke("window:set-pin", pinned),
   setDismissOnBlur: (enabled: boolean) =>
     ipcRenderer.invoke("window:set-dismiss-on-blur", enabled),
+  setStartMinimized: (enabled: boolean): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("window:set-start-minimized", enabled),
 
   // ── Hotkey ────────────────────────────────────────────────────────────────
   updateHotkey: (accelerator: string): Promise<{ success: boolean }> =>

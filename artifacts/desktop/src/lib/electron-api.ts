@@ -14,6 +14,7 @@ interface IElectronAPI {
   minimizeWindow: () => Promise<void>;
   setPinned: (pinned: boolean) => Promise<void>;
   setDismissOnBlur: (enabled: boolean) => Promise<void>;
+  setStartMinimized: (enabled: boolean) => Promise<{ success: boolean }>;
   updateHotkey: (accelerator: string) => Promise<{ success: boolean }>;
   setAutoLaunch: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   isAutoLaunchEnabled: () => Promise<boolean>;
@@ -59,6 +60,7 @@ export const electron = {
   minimizeWindow: electronAPI?.minimizeWindow ?? noop,
   setPinned: electronAPI?.setPinned ?? noop,
   setDismissOnBlur: electronAPI?.setDismissOnBlur ?? noop,
+  setStartMinimized: electronAPI?.setStartMinimized ?? noopResult,
   updateHotkey: electronAPI?.updateHotkey ?? noopResult,
   setAutoLaunch: electronAPI?.setAutoLaunch ?? noopResult,
   isAutoLaunchEnabled: electronAPI?.isAutoLaunchEnabled ?? noopBool,
