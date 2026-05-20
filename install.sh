@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REPO="josephsierengowski/axiom"
+REPO="sierengowskisierengowski-cpu/Desktop-Assistant-AI"
 INSTALL_DIR="$HOME/.local/bin"
 APP_NAME="axiom"
 
