@@ -1,19 +1,20 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { initScheduler } from "./routes/scheduler";
+import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
+const port = rawPort && !Number.isNaN(Number(rawPort)) && Number(rawPort) > 0
+  ? Number(rawPort)
+  : 8080;
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+// Bootstrap SQLite schema on every startup (no-op when already up-to-date)
+try {
+  runMigrations();
+  logger.info("Database migrations applied");
+} catch (e) {
+  logger.error({ err: e }, "Database migration failed — check DB path and permissions");
+  process.exit(1);
 }
 
 app.listen(port, async (err) => {

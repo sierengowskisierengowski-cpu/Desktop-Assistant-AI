@@ -92,11 +92,13 @@ function startApiServer(): void {
     log.warn("API server binary not found at:", serverPath);
     return;
   }
+  const axiomDbPath = path.join(app.getPath("userData"), "axiom.db");
   apiServerProcess = spawn(process.execPath, [serverPath], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: "8080",
+      AXIOM_DB_PATH: axiomDbPath,
     },
     detached: false,
     stdio: ["ignore", "pipe", "pipe"],
