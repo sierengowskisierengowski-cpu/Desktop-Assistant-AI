@@ -15,10 +15,10 @@ const router = Router();
 
 const activeCrons = new Map<number, ScheduledTask>();
 
-function calcNextRun(schedule: string): Date | null {
+function calcNextRun(schedule: string): string | null {
   try {
     const expr = CronExpressionParser.parse(schedule);
-    return expr.next().toDate();
+    return expr.next().toDate().toISOString();
   } catch {
     return null;
   }
@@ -157,7 +157,7 @@ Rules:
   }
 
   await db.update(scheduledTasksTable).set({
-    lastRunAt: new Date(),
+    lastRunAt: new Date().toISOString(),
     lastRunStatus: success ? "success" : "error",
     nextRunAt: calcNextRun(task.schedule),
   }).where(eq(scheduledTasksTable.id, id));
@@ -236,7 +236,7 @@ router.delete("/scheduler/tasks/:id", async (req, res) => {
 router.post("/scheduler/tasks/:id/run", async (req, res) => {
   const id = parseInt(req.params.id);
   const result = await runTask(id);
-  res.json({ ...result, ranAt: new Date() });
+  res.json({ ...result, ranAt: new Date().toISOString() });
 });
 
 // POST /scheduler/tasks/:id/toggle
@@ -253,13 +253,13 @@ router.post("/scheduler/tasks/:id/toggle", async (req, res) => {
 // GET /scheduler/status
 router.get("/scheduler/status", async (_req, res) => {
   const tasks = await db.select().from(scheduledTasksTable);
-  const now = new Date();
+  const now = Date.now();
   const statusTasks = tasks.map(t => ({
     id: t.id,
     name: t.name,
     enabled: t.enabled,
-    nextRunAt: t.nextRunAt?.toISOString() || null,
-    secondsUntilRun: t.nextRunAt ? Math.max(0, Math.floor((t.nextRunAt.getTime() - now.getTime()) / 1000)) : null,
+    nextRunAt: t.nextRunAt || null,
+    secondsUntilRun: t.nextRunAt ? Math.max(0, Math.floor((new Date(t.nextRunAt).getTime() - now) / 1000)) : null,
   }));
   res.json({
     tasks: statusTasks,

@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import { db } from "@workspace/db";
 import { activityLogTable, allowedPathsTable } from "@workspace/db";
+import type { AllowedPath } from "@workspace/db";
 
 export const TEMP_UNDO_DIR = path.join(os.tmpdir(), "axiom-undo");
 
@@ -18,13 +19,17 @@ export async function canonicalize(p: string): Promise<string> {
   }
 }
 
-export async function isPathAllowed(targetPath: string): Promise<boolean> {
-  const allowed = await db.select().from(allowedPathsTable);
-  const canonical = await canonicalize(targetPath);
-  return allowed.some(a => {
+function isCanonicalAllowed(canonical: string, allowedPaths: AllowedPath[]): boolean {
+  return allowedPaths.some(a => {
     const base = path.resolve(a.path);
     return canonical === base || canonical.startsWith(base + path.sep);
   });
+}
+
+export async function isPathAllowed(targetPath: string): Promise<boolean> {
+  const allowed = await db.select().from(allowedPathsTable);
+  const canonical = await canonicalize(targetPath);
+  return isCanonicalAllowed(canonical, allowed);
 }
 
 export type ScanFile = {
@@ -59,7 +64,7 @@ export async function scanDirectory(
       if (recursive && entry.isDirectory() && currentDepth < maxDepth) {
         results.push(...await scanDirectory(fullPath, recursive, maxDepth, currentDepth + 1));
       }
-    } catch (scanErr) {
+    } catch {
       // Skip files we cannot stat (permission denied, broken symlinks, etc.)
     }
   }
@@ -120,6 +125,8 @@ export interface ExecuteResult {
 export async function executeFileOperation(params: ExecuteParams): Promise<ExecuteResult> {
   await ensureUndoDir();
 
+  const allowedPaths = await db.select().from(allowedPathsTable);
+
   let files: ScanFile[];
   try {
     files = await scanDirectory(params.path, true, 3);
@@ -142,9 +149,19 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
   const undoMoves: Array<{ from: string; to: string }> = [];
   let processed = 0;
 
+  async function guardFile(filePath: string): Promise<string | null> {
+    const canonical = await canonicalize(filePath);
+    if (!isCanonicalAllowed(canonical, allowedPaths)) {
+      return `Path resolves outside allowed directories (symlink escape rejected): ${canonical}`;
+    }
+    return null;
+  }
+
   if (params.operation === "delete") {
     affected = applyCriteria(affected, params.criteria);
     for (const f of affected) {
+      const guardErr = await guardFile(f.path);
+      if (guardErr) { errors.push({ file: f.path, error: guardErr }); continue; }
       const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${Math.random().toString(36).slice(2)}_${f.name}`);
       try {
         await fs.rename(f.path, tempPath);
@@ -157,6 +174,8 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     }
   } else if (params.operation === "organize") {
     for (const f of affected) {
+      const guardErr = await guardFile(f.path);
+      if (guardErr) { errors.push({ file: f.path, error: guardErr }); continue; }
       const folder = f.extension ? (TYPE_MAP[f.extension] || "Other") : "Other";
       const destDir = path.join(params.path, folder);
       const destPath = path.join(destDir, f.name);
@@ -181,6 +200,17 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
         undoKey: null,
       };
     }
+    const destGuardErr = await guardFile(params.destination);
+    if (destGuardErr) {
+      return {
+        success: false,
+        filesProcessed: 0,
+        summary: destGuardErr,
+        details: [],
+        errors: [{ file: params.destination, error: destGuardErr }],
+        undoKey: null,
+      };
+    }
     try {
       await fs.mkdir(params.destination, { recursive: true });
     } catch (err) {
@@ -195,6 +225,8 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
       };
     }
     for (const f of affected) {
+      const guardErr = await guardFile(f.path);
+      if (guardErr) { errors.push({ file: f.path, error: guardErr }); continue; }
       const destPath = path.join(params.destination, f.name);
       try {
         await fs.rename(f.path, destPath);
@@ -214,6 +246,8 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     });
     const dupes = [...sizeMap.values()].filter(g => g.length > 1).flatMap(g => g.slice(1));
     for (const f of dupes) {
+      const guardErr = await guardFile(f.path);
+      if (guardErr) { errors.push({ file: f.path, error: guardErr }); continue; }
       const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${Math.random().toString(36).slice(2)}_${f.name}`);
       try {
         await fs.rename(f.path, tempPath);
@@ -231,6 +265,8 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     const addNumbers = /number/i.test(criteria);
     let index = 1;
     for (const f of affected) {
+      const guardErr = await guardFile(f.path);
+      if (guardErr) { errors.push({ file: f.path, error: guardErr }); continue; }
       const ext = f.extension || "";
       const base = path.basename(f.name, ext);
       let newName = f.name;
@@ -262,7 +298,6 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
       ? JSON.stringify({ moves: undoMoves })
       : null;
 
-  // Only log if at least one file was processed
   if (!params.skipActivityLog && processed > 0) {
     await db.insert(activityLogTable).values({
       type: "file_op",

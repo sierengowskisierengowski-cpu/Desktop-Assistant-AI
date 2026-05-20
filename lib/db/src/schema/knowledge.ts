@@ -1,14 +1,15 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 
-export const knowledgeNotesTable = pgTable("knowledge_notes", {
-  id: serial("id").primaryKey(),
+export const knowledgeNotesTable = sqliteTable("knowledge_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   content: text("content").notNull().default(""),
-  pinned: boolean("pinned").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
 export const insertKnowledgeNoteSchema = createInsertSchema(knowledgeNotesTable).omit({ id: true, createdAt: true, updatedAt: true });

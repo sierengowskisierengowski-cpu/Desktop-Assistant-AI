@@ -33,7 +33,7 @@ router.patch("/knowledge/notes/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const body = UpdateKnowledgeNoteBody.parse(req.body);
   const [note] = await db.update(knowledgeNotesTable)
-    .set({ ...body, updatedAt: new Date() })
+    .set({ ...body, updatedAt: new Date().toISOString() })
     .where(eq(knowledgeNotesTable.id, id))
     .returning();
   if (!note) return res.status(404).json({ error: "Not found" });

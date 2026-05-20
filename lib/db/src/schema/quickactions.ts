@@ -1,15 +1,16 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 
-export const quickActionsTable = pgTable("quick_actions", {
-  id: serial("id").primaryKey(),
+export const quickActionsTable = sqliteTable("quick_actions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   label: text("label").notNull(),
   command: text("command").notNull(),
   icon: text("icon"),
   color: text("color"),
   order: integer("order").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: text("created_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
 export const insertQuickActionSchema = createInsertSchema(quickActionsTable).omit({ id: true, createdAt: true });

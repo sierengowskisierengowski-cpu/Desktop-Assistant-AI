@@ -31,6 +31,15 @@ async function getKnowledgeContext(): Promise<string> {
   return "\n\n## User Knowledge Base\n" + notes.map(n => `### ${n.title}\n${n.content}`).join("\n\n");
 }
 
+function buildSystemPrompt(knowledgeCtx: string): string {
+  return `You are AXIOM, a premium desktop AI assistant. You help the user manage their computer — organizing files, running scheduled tasks, answering questions about their system, and executing file operations.
+
+When the user asks you to perform a file operation (delete, move, organize, rename, find duplicates), respond with a JSON action block at the end of your message in this format:
+<action>{"type":"file_op","operation":"delete|move|organize|rename|dedup","path":"/path/to/dir","criteria":"optional criteria","destination":"optional dest","requiresConfirmation":true,"description":"human readable description of what will happen"}</action>
+
+For informational requests, just respond naturally. Keep responses concise and direct. You are speaking to a power user.${knowledgeCtx}`;
+}
+
 // GET /chat/sessions
 router.get("/chat/sessions", async (_req, res) => {
   const sessions = await db
@@ -71,7 +80,127 @@ router.delete("/chat/sessions/:id", async (req, res) => {
   res.status(204).send();
 });
 
-// POST /chat/sessions/:id/messages
+// POST /chat/sessions/:id/messages/stream  — SSE streaming endpoint
+router.post("/chat/sessions/:id/messages/stream", async (req, res) => {
+  const sessionId = parseInt(req.params.id);
+  const body = SendChatMessageBody.parse(req.body);
+
+  const [session] = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId));
+  if (!session) return res.status(404).json({ error: "Not found" });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const [userMessage] = await db.insert(chatMessagesTable).values({
+    sessionId,
+    role: "user",
+    content: body.content,
+  }).returning();
+  sendEvent("user_message", { id: userMessage.id });
+
+  const [settingsRow] = await db.select().from(settingsTable).limit(1);
+  const knowledgeCtx = await getKnowledgeContext();
+  const systemPrompt = buildSystemPrompt(knowledgeCtx);
+
+  const previousMessages = await db.select().from(chatMessagesTable)
+    .where(eq(chatMessagesTable.sessionId, sessionId))
+    .orderBy(chatMessagesTable.createdAt)
+    .limit(20);
+
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+    ...previousMessages.slice(0, -1).map(m => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user", content: body.content },
+  ];
+
+  let aiContent = "";
+  let actionType: string | null = null;
+  let actionData: string | null = null;
+  let action = null;
+
+  try {
+    const client = getOpenAIClient(settingsRow || {
+      cloudApiKey: null, cloudBaseUrl: null,
+      ollamaBaseUrl: "http://localhost:11434", aiMode: "cloud",
+    });
+
+    const stream = await client.chat.completions.create({
+      model: settingsRow?.aiModel || "gpt-4o-mini",
+      messages,
+      max_tokens: 1024,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        aiContent += delta;
+        sendEvent("chunk", { content: delta });
+      }
+    }
+
+    if (!aiContent) {
+      aiContent = "I understand your request. Let me help you with that.";
+    }
+
+    const actionMatch = aiContent.match(/<action>(.*?)<\/action>/s);
+    if (actionMatch) {
+      try {
+        const parsed = JSON.parse(actionMatch[1]);
+        actionType = parsed.type || "file_op";
+        actionData = actionMatch[1];
+        action = {
+          type: parsed.type || "file_op",
+          description: parsed.description || "File operation pending",
+          payload: actionMatch[1],
+          requiresConfirmation: parsed.requiresConfirmation !== false,
+        };
+        aiContent = aiContent.replace(/<action>.*?<\/action>/s, "").trim();
+      } catch {}
+    }
+  } catch {
+    aiContent = "I'm having trouble connecting to the AI provider. Please check your settings — make sure your API key is configured or Ollama is running locally.";
+    sendEvent("chunk", { content: aiContent });
+  }
+
+  const [assistantMessage] = await db.insert(chatMessagesTable).values({
+    sessionId,
+    role: "assistant",
+    content: aiContent,
+    actionType,
+    actionData,
+  }).returning();
+
+  await db.update(chatSessionsTable).set({ updatedAt: new Date().toISOString() }).where(eq(chatSessionsTable.id, sessionId));
+
+  if (session.title === "New Chat" && body.content.length > 0) {
+    const newTitle = body.content.slice(0, 60) + (body.content.length > 60 ? "..." : "");
+    await db.update(chatSessionsTable).set({ title: newTitle, updatedAt: new Date().toISOString() }).where(eq(chatSessionsTable.id, sessionId));
+  }
+
+  await db.insert(activityLogTable).values({
+    type: "chat",
+    description: `Chat: ${body.content.slice(0, 80)}`,
+    detail: aiContent.slice(0, 200),
+    filesAffected: "[]",
+    undoable: false,
+  });
+
+  sendEvent("done", { messageId: assistantMessage.id, action });
+  res.end();
+});
+
+// POST /chat/sessions/:id/messages  — non-streaming fallback
 router.post("/chat/sessions/:id/messages", async (req, res) => {
   const sessionId = parseInt(req.params.id);
   const body = SendChatMessageBody.parse(req.body);
@@ -87,13 +216,7 @@ router.post("/chat/sessions/:id/messages", async (req, res) => {
 
   const [settingsRow] = await db.select().from(settingsTable).limit(1);
   const knowledgeCtx = await getKnowledgeContext();
-
-  const systemPrompt = `You are AXIOM, a premium desktop AI assistant. You help the user manage their computer — organizing files, running scheduled tasks, answering questions about their system, and executing file operations.
-
-When the user asks you to perform a file operation (delete, move, organize, rename, find duplicates), respond with a JSON action block at the end of your message in this format:
-<action>{"type":"file_op","operation":"delete|move|organize|rename|dedup","path":"/path/to/dir","criteria":"optional criteria","destination":"optional dest","requiresConfirmation":true,"description":"human readable description of what will happen"}</action>
-
-For informational requests, just respond naturally. Keep responses concise and direct. You are speaking to a power user.${knowledgeCtx}`;
+  const systemPrompt = buildSystemPrompt(knowledgeCtx);
 
   const previousMessages = await db.select().from(chatMessagesTable)
     .where(eq(chatMessagesTable.sessionId, sessionId))
@@ -141,7 +264,7 @@ For informational requests, just respond naturally. Keep responses concise and d
         aiContent = aiContent.replace(/<action>.*?<\/action>/s, "").trim();
       } catch {}
     }
-  } catch (err) {
+  } catch {
     aiContent = "I'm having trouble connecting to the AI provider. Please check your settings — make sure your API key is configured or Ollama is running locally.";
   }
 
@@ -153,11 +276,11 @@ For informational requests, just respond naturally. Keep responses concise and d
     actionData,
   }).returning();
 
-  await db.update(chatSessionsTable).set({ updatedAt: new Date() }).where(eq(chatSessionsTable.id, sessionId));
+  await db.update(chatSessionsTable).set({ updatedAt: new Date().toISOString() }).where(eq(chatSessionsTable.id, sessionId));
 
   if (session.title === "New Chat" && body.content.length > 0) {
     const newTitle = body.content.slice(0, 60) + (body.content.length > 60 ? "..." : "");
-    await db.update(chatSessionsTable).set({ title: newTitle }).where(eq(chatSessionsTable.id, sessionId));
+    await db.update(chatSessionsTable).set({ title: newTitle, updatedAt: new Date().toISOString() }).where(eq(chatSessionsTable.id, sessionId));
   }
 
   await db.insert(activityLogTable).values({
@@ -168,6 +291,7 @@ For informational requests, just respond naturally. Keep responses concise and d
     undoable: false,
   });
 
+  void userMessage;
   res.json({ message: assistantMessage, action });
 });
 

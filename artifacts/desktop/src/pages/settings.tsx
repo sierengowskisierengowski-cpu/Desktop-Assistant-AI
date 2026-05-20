@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2, Pin } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2, Pin, Plus, Shield } from "lucide-react";
 import { electron, isElectron } from "@/lib/electron-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,9 @@ import {
   useDeleteAiModel,
   useGetModelPullStatus,
   getGetModelPullStatusQueryKey,
+  useGetAllowedPaths, getGetAllowedPathsQueryKey,
+  useAddAllowedPath,
+  useRemoveAllowedPath,
 } from "@workspace/api-client-react";
 import type { AppSettings, AppSettingsUpdate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -61,6 +64,7 @@ export default function Settings() {
   const [, setLocation] = useLocation();
   const [pullModelName, setPullModelName] = useState("");
   const [activePulling, setActivePulling] = useState<string | null>(null);
+  const [newPathInput, setNewPathInput] = useState("");
 
   const { data: settings, isLoading } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
   const { data: aiStatus } = useGetAiStatus({
@@ -149,6 +153,47 @@ export default function Settings() {
   const handleRerunOnboarding = () => {
     update({ onboardingCompleted: false });
     setTimeout(() => setLocation("/onboarding"), 100);
+  };
+
+  const { data: allowedPaths = [] } = useGetAllowedPaths({
+    query: { queryKey: getGetAllowedPathsQueryKey() },
+  });
+  const addPath = useAddAllowedPath();
+  const removePath = useRemoveAllowedPath();
+
+  const handleAddPath = async (overridePath?: string) => {
+    let pathToAdd = overridePath ?? newPathInput.trim();
+    if (isElectron && !overridePath) {
+      const result = await electron.openDirectoryDialog();
+      if (!result) return;
+      pathToAdd = result;
+    }
+    if (!pathToAdd) return;
+
+    addPath.mutate({ data: { path: pathToAdd } }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAllowedPathsQueryKey() });
+        setNewPathInput("");
+        toast({ title: "Path added" });
+      },
+      onError: () => toast({ title: "Failed to add path", variant: "destructive" }),
+    });
+  };
+
+  const handleBrowsePath = async () => {
+    if (!isElectron) return;
+    const result = await electron.openDirectoryDialog();
+    if (result) setNewPathInput(result);
+  };
+
+  const handleRemovePath = (id: number) => {
+    removePath.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAllowedPathsQueryKey() });
+        toast({ title: "Path removed" });
+      },
+      onError: () => toast({ title: "Failed to remove path", variant: "destructive" }),
+    });
   };
 
   const localModels = models.filter(m => m.type === "local");
@@ -382,6 +427,59 @@ export default function Settings() {
               </SettingRow>
             </>
           )}
+        </Section>
+
+        {/* Allowed Paths */}
+        <Section title="Allowed Paths" icon={Shield}>
+          <p className="text-xs text-muted-foreground">AXIOM will only read and write within these directories.</p>
+          <div className="space-y-2">
+            {allowedPaths.length === 0 && (
+              <p className="text-xs text-muted-foreground/60 italic">No paths added yet.</p>
+            )}
+            {allowedPaths.map((entry) => (
+              <div key={entry.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2 border border-white/10">
+                <FolderOpen className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+                <span className="text-xs font-mono flex-1 truncate">{entry.path}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="w-6 h-6 hover:bg-destructive/10 shrink-0"
+                  onClick={() => handleRemovePath(entry.id)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={newPathInput}
+              onChange={e => setNewPathInput(e.target.value)}
+              placeholder="/Users/me/Documents"
+              className="glass-input h-8 text-xs font-mono flex-1"
+              onKeyDown={e => e.key === "Enter" && handleAddPath()}
+            />
+            {isElectron && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 border border-white/10"
+                onClick={handleBrowsePath}
+                title="Browse for folder"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+              </Button>
+            )}
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30"
+              onClick={() => handleAddPath()}
+              disabled={addPath.isPending || (!isElectron && !newPathInput.trim())}
+            >
+              {addPath.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
+              Add
+            </Button>
+          </div>
         </Section>
 
         {/* Hotkey */}

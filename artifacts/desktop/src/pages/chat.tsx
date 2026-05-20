@@ -292,6 +292,9 @@ export default function Chat() {
     { query: { enabled: !!activeSessionId, queryKey: getGetChatSessionQueryKey(activeSessionId ?? 0) } }
   );
 
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+
   const createSession = useCreateChatSession();
   const deleteSession = useDeleteChatSession();
   const sendMessage = useSendChatMessage();
@@ -336,7 +339,7 @@ export default function Chat() {
   }, [deleteSession, queryClient, activeSessionId, sessions]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || sendMessage.isPending) return;
+    if (!input.trim() || isStreaming) return;
     if (!activeSessionId) {
       createSession.mutate(
         { data: { title: input.slice(0, 60) } },
@@ -351,26 +354,71 @@ export default function Chat() {
       return;
     }
     doSend(activeSessionId);
-  }, [input, sendMessage.isPending, activeSessionId, createSession, queryClient]);
+  }, [input, isStreaming, activeSessionId, createSession, queryClient]);
 
   const doSend = useCallback((sessionId: number) => {
     const content = input.trim();
     setInput("");
-    sendMessage.mutate(
-      { id: sessionId, data: { content } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetChatSessionQueryKey(sessionId) });
-          queryClient.invalidateQueries({ queryKey: getListChatSessionsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetRecentChatsQueryKey() });
-        },
-        onError: () => {
-          toast({ title: "Failed to send message", variant: "destructive" });
-          setInput(content);
-        },
+    setIsStreaming(true);
+    setStreamingContent("");
+
+    fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    }).then(async (response) => {
+      if (!response.ok || !response.body) {
+        setIsStreaming(false);
+        setStreamingContent("");
+        toast({ title: "Failed to send message", variant: "destructive" });
+        setInput(content);
+        return;
       }
-    );
-  }, [input, sendMessage, queryClient, toast]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const lines = part.split("\n");
+            let eventType = "";
+            let eventData = "";
+            for (const line of lines) {
+              if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+              else if (line.startsWith("data: ")) eventData = line.slice(6);
+            }
+            if (!eventData) continue;
+            try {
+              const data = JSON.parse(eventData) as Record<string, unknown>;
+              if (eventType === "chunk" && typeof data.content === "string") {
+                setStreamingContent(prev => prev + data.content);
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+
+      setIsStreaming(false);
+      setStreamingContent("");
+      queryClient.invalidateQueries({ queryKey: getGetChatSessionQueryKey(sessionId) });
+      queryClient.invalidateQueries({ queryKey: getListChatSessionsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetRecentChatsQueryKey() });
+    }).catch(() => {
+      setIsStreaming(false);
+      setStreamingContent("");
+      toast({ title: "Failed to send message", variant: "destructive" });
+      setInput(content);
+    });
+  }, [input, queryClient, toast]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -487,10 +535,10 @@ export default function Chat() {
           <span className="text-sm font-medium">
             {activeSession?.title || "Select a session"}
           </span>
-          {sendMessage.isPending && (
+          {isStreaming && (
             <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
-              Thinking...
+              {streamingContent ? "Responding..." : "Thinking..."}
             </div>
           )}
         </div>
@@ -550,20 +598,27 @@ export default function Chat() {
                   <MessageBubble key={msg.id} msg={msg} isLast={i === messages.length - 1} />
                 ))}
               </AnimatePresence>
-              {sendMessage.isPending && (
+              {isStreaming && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="flex gap-3 mb-4"
                 >
-                  <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5">
+                  <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-0.5 shrink-0">
                     <Bot className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
-                  <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
+                  {streamingContent ? (
+                    <div className="glass-card px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed max-w-[75%]">
+                      <p className="whitespace-pre-wrap break-words">{streamingContent}</p>
+                      <span className="inline-block w-1 h-3.5 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                    </div>
+                  ) : (
+                    <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  )}
                 </motion.div>
               )}
               <div ref={bottomRef} />
@@ -582,7 +637,7 @@ export default function Chat() {
               placeholder="Ask AXIOM to organize files, run a task, or answer a question..."
               className="min-h-[44px] max-h-[120px] resize-none glass-input rounded-xl text-sm py-2.5 flex-1"
               rows={1}
-              disabled={sendMessage.isPending}
+              disabled={isStreaming}
               data-testid="input-chat-message"
             />
             <Button
@@ -603,11 +658,11 @@ export default function Chat() {
             <Button
               size="icon"
               onClick={handleSend}
-              disabled={!input.trim() || sendMessage.isPending}
+              disabled={!input.trim() || isStreaming}
               className="h-10 w-10 shrink-0 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 disabled:opacity-40"
               data-testid="button-send-message"
             >
-              {sendMessage.isPending
+              {isStreaming
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : <Send className="w-4 h-4" />}
             </Button>

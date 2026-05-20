@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Keyboard, Shield, Brain, Cloud, Cpu, ArrowRight, CheckCircle2, Loader2, Plus, Trash2 } from "lucide-react";
+import { Zap, Keyboard, Shield, Brain, Cloud, Cpu, ArrowRight, CheckCircle2, Loader2, Plus, Trash2, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { electron, isElectron } from "@/lib/electron-api";
 import {
   useUpdateSettings,
   useCreateKnowledgeNote,
@@ -204,14 +205,32 @@ export default function Onboarding() {
                           setPaths(next);
                         }}
                         placeholder="/Users/me/Downloads"
-                        className="glass-input text-sm font-mono"
+                        className="glass-input text-sm font-mono flex-1"
                         data-testid={`input-path-${i}`}
                       />
+                      {isElectron && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="w-8 h-8 border border-white/10 shrink-0"
+                          title="Browse for folder"
+                          onClick={async () => {
+                            const result = await electron.openDirectoryDialog();
+                            if (result) {
+                              const next = [...paths];
+                              next[i] = result;
+                              setPaths(next);
+                            }
+                          }}
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                       {paths.length > 1 && (
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="w-8 h-8 hover:bg-destructive/10"
+                          className="w-8 h-8 hover:bg-destructive/10 shrink-0"
                           onClick={() => setPaths(paths.filter((_, j) => j !== i))}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -223,11 +242,18 @@ export default function Onboarding() {
                     size="sm"
                     variant="ghost"
                     className="h-7 text-xs border border-white/10"
-                    onClick={() => setPaths([...paths, ""])}
+                    onClick={async () => {
+                      if (isElectron) {
+                        const result = await electron.openDirectoryDialog();
+                        if (result) setPaths([...paths, result]);
+                      } else {
+                        setPaths([...paths, ""]);
+                      }
+                    }}
                     data-testid="button-add-onboarding-path"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Add another path
+                    {isElectron ? "Browse for folder" : "Add another path"}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">You can add or remove paths later in Settings.</p>
