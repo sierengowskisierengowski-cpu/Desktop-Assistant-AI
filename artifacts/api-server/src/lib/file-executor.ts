@@ -6,7 +6,7 @@ import { activityLogTable, allowedPathsTable } from "@workspace/db";
 
 export const TEMP_UNDO_DIR = path.join(os.tmpdir(), "axiom-undo");
 
-export async function ensureUndoDir() {
+export async function ensureUndoDir(): Promise<void> {
   await fs.mkdir(TEMP_UNDO_DIR, { recursive: true });
 }
 
@@ -59,7 +59,9 @@ export async function scanDirectory(
       if (recursive && entry.isDirectory() && currentDepth < maxDepth) {
         results.push(...await scanDirectory(fullPath, recursive, maxDepth, currentDepth + 1));
       }
-    } catch {}
+    } catch (scanErr) {
+      // Skip files we cannot stat (permission denied, broken symlinks, etc.)
+    }
   }
   return results;
 }
@@ -101,19 +103,41 @@ export interface ExecuteParams {
   skipActivityLog?: boolean;
 }
 
+export interface FileOpError {
+  file: string;
+  error: string;
+}
+
 export interface ExecuteResult {
   success: boolean;
   filesProcessed: number;
   summary: string;
   details: string[];
+  errors: FileOpError[];
   undoKey: string | null;
 }
 
 export async function executeFileOperation(params: ExecuteParams): Promise<ExecuteResult> {
   await ensureUndoDir();
-  const files = await scanDirectory(params.path, true, 3);
+
+  let files: ScanFile[];
+  try {
+    files = await scanDirectory(params.path, true, 3);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      filesProcessed: 0,
+      summary: `Cannot access directory: ${msg}`,
+      details: [],
+      errors: [{ file: params.path, error: msg }],
+      undoKey: null,
+    };
+  }
+
   let affected = files.filter(f => f.type === "file");
   const details: string[] = [];
+  const errors: FileOpError[] = [];
   const undoFiles: Array<{ tempPath: string; originalPath: string }> = [];
   const undoMoves: Array<{ from: string; to: string }> = [];
   let processed = 0;
@@ -121,29 +145,55 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
   if (params.operation === "delete") {
     affected = applyCriteria(affected, params.criteria);
     for (const f of affected) {
+      const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${Math.random().toString(36).slice(2)}_${f.name}`);
       try {
-        const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${f.name}`);
         await fs.rename(f.path, tempPath);
         undoFiles.push({ tempPath, originalPath: f.path });
         details.push(`Deleted: ${f.name}`);
         processed++;
-      } catch {}
+      } catch (err) {
+        errors.push({ file: f.path, error: err instanceof Error ? err.message : String(err) });
+      }
     }
   } else if (params.operation === "organize") {
     for (const f of affected) {
       const folder = f.extension ? (TYPE_MAP[f.extension] || "Other") : "Other";
       const destDir = path.join(params.path, folder);
-      await fs.mkdir(destDir, { recursive: true });
       const destPath = path.join(destDir, f.name);
       try {
+        await fs.mkdir(destDir, { recursive: true });
         await fs.rename(f.path, destPath);
         undoMoves.push({ from: f.path, to: destPath });
         details.push(`Moved ${f.name} → ${folder}/`);
         processed++;
-      } catch {}
+      } catch (err) {
+        errors.push({ file: f.path, error: err instanceof Error ? err.message : String(err) });
+      }
     }
-  } else if (params.operation === "move" && params.destination) {
-    await fs.mkdir(params.destination, { recursive: true });
+  } else if (params.operation === "move") {
+    if (!params.destination) {
+      return {
+        success: false,
+        filesProcessed: 0,
+        summary: "Move operation requires a destination path",
+        details: [],
+        errors: [{ file: params.path, error: "Missing destination" }],
+        undoKey: null,
+      };
+    }
+    try {
+      await fs.mkdir(params.destination, { recursive: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        filesProcessed: 0,
+        summary: `Cannot create destination directory: ${msg}`,
+        details: [],
+        errors: [{ file: params.destination, error: msg }],
+        undoKey: null,
+      };
+    }
     for (const f of affected) {
       const destPath = path.join(params.destination, f.name);
       try {
@@ -151,7 +201,9 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
         undoMoves.push({ from: f.path, to: destPath });
         details.push(`Moved: ${f.name}`);
         processed++;
-      } catch {}
+      } catch (err) {
+        errors.push({ file: f.path, error: err instanceof Error ? err.message : String(err) });
+      }
     }
   } else if (params.operation === "dedup") {
     const sizeMap = new Map<number, ScanFile[]>();
@@ -162,15 +214,16 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     });
     const dupes = [...sizeMap.values()].filter(g => g.length > 1).flatMap(g => g.slice(1));
     for (const f of dupes) {
+      const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${Math.random().toString(36).slice(2)}_${f.name}`);
       try {
-        const tempPath = path.join(TEMP_UNDO_DIR, `${Date.now()}_${f.name}`);
         await fs.rename(f.path, tempPath);
         undoFiles.push({ tempPath, originalPath: f.path });
         details.push(`Removed duplicate: ${f.name}`);
         processed++;
-      } catch {}
+      } catch (err) {
+        errors.push({ file: f.path, error: err instanceof Error ? err.message : String(err) });
+      }
     }
-    affected = dupes;
   } else if (params.operation === "rename") {
     const criteria = params.criteria || "";
     const prefixMatch = criteria.match(/prefix[:\s]+["']?([^"',]+?)["']?(?:,|$)/i);
@@ -195,7 +248,9 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
           undoMoves.push({ from: f.path, to: destPath });
           details.push(`Renamed: ${f.name} → ${newName}`);
           processed++;
-        } catch {}
+        } catch (err) {
+          errors.push({ file: f.path, error: err instanceof Error ? err.message : String(err) });
+        }
       }
       index++;
     }
@@ -207,7 +262,8 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
       ? JSON.stringify({ moves: undoMoves })
       : null;
 
-  if (!params.skipActivityLog) {
+  // Only log if at least one file was processed
+  if (!params.skipActivityLog && processed > 0) {
     await db.insert(activityLogTable).values({
       type: "file_op",
       description: `${params.operation} on ${params.path}`,
@@ -218,11 +274,17 @@ export async function executeFileOperation(params: ExecuteParams): Promise<Execu
     });
   }
 
+  const hasErrors = errors.length > 0;
+  const summary = processed === 0 && hasErrors
+    ? `All ${errors.length} operation(s) failed`
+    : `Processed ${processed} file(s) via ${params.operation}${hasErrors ? ` (${errors.length} error(s))` : ""}`;
+
   return {
-    success: true,
+    success: processed > 0,
     filesProcessed: processed,
-    summary: `Processed ${processed} files via ${params.operation}`,
+    summary,
     details: details.slice(0, 20),
+    errors: errors.slice(0, 10),
     undoKey,
   };
 }

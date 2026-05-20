@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown } from "lucide-react";
+import { Send, Plus, Trash2, MessageSquare, Bot, User, Loader2, AlertCircle, CheckCircle2, XCircle, FileText, ChevronDown, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -277,8 +277,11 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [isListening, setIsListening] = useState(false);
 
   const { data: sessions = [], isLoading: sessionsLoading } = useListChatSessions({
     query: { queryKey: getListChatSessionsQueryKey() },
@@ -375,6 +378,48 @@ export default function Chat() {
       handleSend();
     }
   };
+
+  const handleVoiceInput = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SpeechRecognitionCtor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      toast({ title: "Voice input not supported", description: "Your browser does not support speech recognition", variant: "destructive" });
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: any = new SpeechRecognitionCtor();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (e: any) => {
+      setIsListening(false);
+      if (e.error !== "aborted") {
+        toast({ title: "Voice input error", description: e.error, variant: "destructive" });
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript as string;
+      setInput(prev => prev ? `${prev} ${transcript}` : transcript);
+      textareaRef.current?.focus();
+    };
+
+    recognition.start();
+  }, [isListening, toast]);
 
   const messages = activeSession?.messages ?? [];
 
@@ -542,6 +587,21 @@ export default function Chat() {
             />
             <Button
               size="icon"
+              type="button"
+              onClick={handleVoiceInput}
+              title={isListening ? "Stop listening" : "Voice input"}
+              className={cn(
+                "h-10 w-10 shrink-0 rounded-xl border transition-colors",
+                isListening
+                  ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 animate-pulse"
+                  : "bg-white/5 hover:bg-white/10 text-muted-foreground border-white/10"
+              )}
+              data-testid="button-voice-input"
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
+            <Button
+              size="icon"
               onClick={handleSend}
               disabled={!input.trim() || sendMessage.isPending}
               className="h-10 w-10 shrink-0 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 disabled:opacity-40"
@@ -552,7 +612,9 @@ export default function Chat() {
                 : <Send className="w-4 h-4" />}
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground/40 mt-1.5 px-1">Enter to send · Shift+Enter for new line</p>
+          <p className="text-[10px] text-muted-foreground/40 mt-1.5 px-1">
+            {isListening ? "🎤 Listening… click mic to stop" : "Enter to send · Shift+Enter for new line · Mic for voice"}
+          </p>
         </div>
       </div>
     </div>

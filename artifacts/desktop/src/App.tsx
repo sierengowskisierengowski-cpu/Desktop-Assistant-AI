@@ -15,12 +15,21 @@ import Stats from "@/pages/stats";
 import Onboarding from "@/pages/onboarding";
 import { useGetSettings, getGetSettingsQueryKey } from "@workspace/api-client-react";
 import { useEffect } from "react";
+import { electron } from "@/lib/electron-api";
 
 const queryClient = new QueryClient();
 
 function RouteGuard() {
   const [location, setLocation] = useLocation();
   const { data: settings, isLoading } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
+
+  // Handle navigation events dispatched from Electron tray context menu
+  useEffect(() => {
+    const unsub = electron.onNavigate((path) => {
+      setLocation(path);
+    });
+    return unsub;
+  }, [setLocation]);
 
   useEffect(() => {
     if (!isLoading && settings && !settings.onboardingCompleted && location !== "/onboarding") {

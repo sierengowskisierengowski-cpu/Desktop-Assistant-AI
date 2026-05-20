@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Cloud, Keyboard, FolderOpen, Bell, Monitor, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Trash2, Pin } from "lucide-react";
+import { electron, isElectron } from "@/lib/electron-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -98,8 +99,23 @@ export default function Settings() {
 
   const update = useCallback((patch: AppSettingsUpdate) => {
     updateSettings.mutate({ data: patch }, {
-      onSuccess: () => {
+      onSuccess: async () => {
         queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+        // Apply OS-level effects when running as Electron desktop app
+        if (isElectron) {
+          if (patch.hotkey !== undefined) {
+            const result = await electron.updateHotkey(patch.hotkey);
+            if (!result.success) {
+              toast({ title: "Hotkey could not be registered", description: "Try a different key combination", variant: "destructive" });
+            }
+          }
+          if (patch.launchAtLogin !== undefined) {
+            await electron.setAutoLaunch(patch.launchAtLogin);
+          }
+          if (patch.dismissOnBlur !== undefined) {
+            await electron.setDismissOnBlur(patch.dismissOnBlur);
+          }
+        }
       },
       onError: () => toast({ title: "Settings update failed", variant: "destructive" }),
     });
